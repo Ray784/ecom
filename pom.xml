@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.4</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.ecommerce</groupId>
+    <artifactId>ecommerce-platform</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>ecommerce-platform</name>
+    <description>E-commerce microservices platform built on Spring Boot and Kafka</description>
+
+    <properties>
+        <java.version>21</java.version>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <commons-jar.version>1.0.0-SNAPSHOT</commons-jar.version>
+    </properties>
+
+    <modules>
+        <module>commons-jar</module>
+        <module>iam-service</module>
+        <module>user-service</module>
+        <module>product-service</module>
+        <module>search-service</module>
+        <module>order-service</module>
+        <module>payment-service</module>
+        <module>invoice-service</module>
+        <module>notification-service</module>
+        <module>review-service</module>
+        <module>api-gateway</module>
+    </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.ecommerce</groupId>
+                <artifactId>commons-jar</artifactId>
+                <version>${commons-jar.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <configuration>
+                        <trimStackTrace>false</trimStackTrace>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <profiles>
+        <!--
+            Activates only when the running JAVA_HOME is a JRE without javac. The compiler is then
+            forked from a full JDK while still emitting Java 21 bytecode through release 21.
+            Override the location with -Djavac.fallback.executable=/path/to/javac when needed.
+        -->
+        <profile>
+            <id>jre-only-javac-fallback</id>
+            <activation>
+                <file>
+                    <missing>${java.home}/bin/javac</missing>
+                </file>
+            </activation>
+            <properties>
+                <javac.fallback.executable>/usr/lib/jvm/java-25-openjdk-amd64/bin/javac</javac.fallback.executable>
+                <maven.compiler.fork>true</maven.compiler.fork>
+                <maven.compiler.executable>${javac.fallback.executable}</maven.compiler.executable>
+            </properties>
+        </profile>
+    </profiles>
+</project>
