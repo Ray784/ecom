@@ -1,0 +1,52 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: product-service
+  datasource:
+    url: jdbc:h2:mem:productdb;MODE=MySQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  h2:
+    console:
+      enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        max.block.ms: 3000
+        request.timeout.ms: 3000
+        delivery.timeout.ms: 6000
+    consumer:
+      group-id: product-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.value.default.type: com.ecommerce.common.dto.OrderPlacedEvent
+        spring.json.use.type.headers: false
+        spring.json.trusted.packages: "*"
+    listener:
+      missing-topics-fatal: false
+
+product:
+  kafka:
+    listener-auto-startup: true
+    send-timeout-ms: 5000
+  search:
+    enabled: true
+    base-url: ${SEARCH_SERVICE_URL:http://localhost:8089}
+  order-webhook:
+    url: ${ORDER_INVENTORY_WEBHOOK_URL:}
+  http:
+    connect-timeout-ms: 2000
+    read-timeout-ms: 3000
