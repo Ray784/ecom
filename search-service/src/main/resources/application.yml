@@ -1,0 +1,10 @@
+server:
+  port: 8089
+
+spring:
+  application:
+    name: search-service
+
+search:
+  min-query-length: 2
+  max-page-size: 100
