@@ -1,0 +1,23 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+gateway:
+  connect-timeout: 2s
+  read-timeout: 30s
+  services:
+    iam: http://localhost:8081
+    user: http://localhost:8082
+    product: http://localhost:8083
+    order: http://localhost:8084
+    payment: http://localhost:8085
+    invoice: http://localhost:8086
+    notification: http://localhost:8087
+    review: http://localhost:8088
+    search: http://localhost:8089
+  auth:
+    local-fallback-enabled: true
+    jwt-secret: ecommerce-platform-demo-hmac-sha256-signing-secret-key
