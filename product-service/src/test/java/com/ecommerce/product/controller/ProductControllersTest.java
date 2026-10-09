@@ -4,6 +4,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -12,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ecommerce.common.dto.InventoryReservedEvent;
+import com.ecommerce.common.dto.PaymentResultEvent;
 import com.ecommerce.common.dto.ProductDetailsDTO;
 import com.ecommerce.common.error.CodedErrorFactory;
 import com.ecommerce.common.error.MappedError;
@@ -189,5 +192,34 @@ class ProductControllersTest {
         .perform(post("/events/order-placed").contentType(MediaType.APPLICATION_JSON).content("{}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
+  void paymentResultWebhook_validEvent_returns202AndDelegates() throws Exception {
+    when(kafkaListenerService.handlePaymentResult(any())).thenReturn(true);
+
+    mockMvc
+        .perform(
+            post("/events/payment-result")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"orderId\":\"O1\",\"transactionId\":\"pay_1\",\"success\":true}"))
+        .andExpect(status().isAccepted())
+        .andExpect(jsonPath("$.orderId").value("O1"))
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.applied").value(true));
+    verify(kafkaListenerService)
+        .handlePaymentResult(new PaymentResultEvent("O1", "pay_1", true, null));
+  }
+
+  @Test
+  void paymentResultWebhook_missingOrderId_returns400WithoutDelegating() throws Exception {
+    mockMvc
+        .perform(
+            post("/events/payment-result")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"success\":false}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.applied").value(false));
+    verify(kafkaListenerService, never()).handlePaymentResult(any());
   }
 }

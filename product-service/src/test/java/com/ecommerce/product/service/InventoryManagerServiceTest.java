@@ -14,6 +14,7 @@ import com.ecommerce.common.dto.ItemDetails;
 import com.ecommerce.common.exception.ApplicationBaseException;
 import com.ecommerce.product.model.Inventory;
 import com.ecommerce.product.repository.InventoryRepository;
+import com.ecommerce.product.service.InventoryManagerService.ReservationState;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -180,5 +181,79 @@ class InventoryManagerServiceTest {
   void decrementStock_moreThanCurrent_throwsProd4002() {
     when(inventoryRepository.findById("A")).thenReturn(Optional.of(new Inventory("A", 2, 0)));
     assertCode(() -> service.decrementStock(req(item("A", 3))), "PROD_4002");
+  }
+
+  @Test
+  void releaseStock_reducesReservedOnlyAndFloorsAtZero() {
+    Inventory inventory = new Inventory("A", 10, 2);
+    when(inventoryRepository.findById("A")).thenReturn(Optional.of(inventory));
+
+    service.releaseStock(req(item("A", 1)));
+    assertThat(inventory.getReservedStock()).isEqualTo(1);
+
+    service.releaseStock(req(item("A", 5)));
+    assertThat(inventory.getReservedStock()).isZero();
+    assertThat(inventory.getCurrentStock()).isEqualTo(10);
+  }
+
+  @Test
+  void decrementStockForOrder_reservedOrder_decrementsOnceThenIgnoresReplay() {
+    Inventory inventory = new Inventory("A", 15, 0);
+    when(inventoryRepository.findById("A")).thenReturn(Optional.of(inventory));
+    service.reserveStockForOrder("O1", List.of(item("A", 1)));
+    assertThat(service.getReservationState("O1"))
+        .isEqualTo(ReservationState.RESERVED);
+
+    assertThat(service.decrementStockForOrder("O1")).isTrue();
+    assertThat(service.decrementStockForOrder("O1")).isFalse();
+    assertThat(service.releaseReservedStockForOrder("O1")).isFalse();
+
+    assertThat(inventory.getCurrentStock()).isEqualTo(14);
+    assertThat(inventory.getReservedStock()).isZero();
+    assertThat(service.getReservationState("O1"))
+        .isEqualTo(ReservationState.DECREMENTED);
+  }
+
+  @Test
+  void releaseReservedStockForOrder_reservedOrder_releasesOnceThenIgnoresReplay() {
+    Inventory inventory = new Inventory("A", 15, 0);
+    when(inventoryRepository.findById("A")).thenReturn(Optional.of(inventory));
+    service.reserveStockForOrder("O1", List.of(item("A", 2)));
+    assertThat(inventory.getReservedStock()).isEqualTo(2);
+
+    assertThat(service.releaseReservedStockForOrder("O1")).isTrue();
+    assertThat(service.releaseReservedStockForOrder("O1")).isFalse();
+    assertThat(service.decrementStockForOrder("O1")).isFalse();
+
+    assertThat(inventory.getCurrentStock()).isEqualTo(15);
+    assertThat(inventory.getReservedStock()).isZero();
+    assertThat(service.getReservationState("O1"))
+        .isEqualTo(ReservationState.RELEASED);
+  }
+
+  @Test
+  void settleForOrder_unknownBlankOrFailedReservation_returnsFalseWithoutSaving() {
+    when(inventoryRepository.findById("A")).thenReturn(Optional.of(new Inventory("A", 0, 0)));
+    service.reserveStockForOrder("O-FAIL", List.of(item("A", 1)));
+
+    assertThat(service.decrementStockForOrder("O-FAIL")).isFalse();
+    assertThat(service.releaseReservedStockForOrder("UNKNOWN")).isFalse();
+    assertThat(service.decrementStockForOrder(null)).isFalse();
+    assertThat(service.releaseReservedStockForOrder(" ")).isFalse();
+    assertThat(service.getReservationState("O-FAIL")).isNull();
+    assertThat(service.getReservationState(null)).isNull();
+    verify(inventoryRepository, never()).saveAll(anyList());
+  }
+
+  @Test
+  void decrementStockForOrder_stockError_keepsOrderReservedForRetry() {
+    Inventory inventory = new Inventory("A", 5, 0);
+    when(inventoryRepository.findById("A")).thenReturn(Optional.of(inventory));
+    service.reserveStockForOrder("O1", List.of(item("A", 3)));
+    inventory.setCurrentStock(1);
+
+    assertCode(() -> service.decrementStockForOrder("O1"), "PROD_4002");
+    assertThat(service.getReservationState("O1"))
+        .isEqualTo(ReservationState.RESERVED);
   }
 }

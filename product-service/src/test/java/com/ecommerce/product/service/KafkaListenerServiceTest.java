@@ -12,8 +12,10 @@ import static org.mockito.Mockito.when;
 import com.ecommerce.common.dto.InventoryReservedEvent;
 import com.ecommerce.common.dto.ItemDetails;
 import com.ecommerce.common.dto.OrderPlacedEvent;
+import com.ecommerce.common.dto.PaymentResultEvent;
 import com.ecommerce.common.error.CodedErrorFactory;
 import com.ecommerce.common.error.MappedError;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,7 +34,8 @@ class KafkaListenerServiceTest {
   void setUp() {
     inventoryManagerService = mock(InventoryManagerService.class);
     kafkaProducerService = mock(KafkaProducerService.class);
-    service = new KafkaListenerService(inventoryManagerService, kafkaProducerService);
+    service =
+        new KafkaListenerService(inventoryManagerService, kafkaProducerService, new ObjectMapper());
   }
 
   @Test
@@ -87,5 +90,88 @@ class KafkaListenerServiceTest {
     service.onOrderPlaced(event);
 
     verify(kafkaProducerService).sendInventoryResult(any());
+  }
+
+  @Test
+  void handlePaymentResult_success_decrementsStockForOrder() {
+    when(inventoryManagerService.decrementStockForOrder("O1")).thenReturn(true);
+
+    assertThat(service.handlePaymentResult(new PaymentResultEvent("O1", "T1", true, null)))
+        .isTrue();
+    verify(inventoryManagerService, never()).releaseReservedStockForOrder(any());
+  }
+
+  @Test
+  void handlePaymentResult_failure_releasesReservedStockForOrder() {
+    when(inventoryManagerService.releaseReservedStockForOrder("O1")).thenReturn(true);
+
+    assertThat(service.handlePaymentResult(new PaymentResultEvent("O1", null, false, "declined")))
+        .isTrue();
+    verify(inventoryManagerService, never()).decrementStockForOrder(any());
+  }
+
+  @Test
+  void handlePaymentResult_missingOrderId_returnsFalseWithoutSideEffects() {
+    assertThat(service.handlePaymentResult(null)).isFalse();
+    assertThat(service.handlePaymentResult(new PaymentResultEvent(" ", "T1", true, null)))
+        .isFalse();
+
+    verify(inventoryManagerService, never()).decrementStockForOrder(any());
+    verify(inventoryManagerService, never()).releaseReservedStockForOrder(any());
+  }
+
+  @Test
+  void onPaymentSuccessful_jsonObject_decrements() {
+    service.onPaymentSuccessful("{\"orderId\":\"O1\",\"success\":true,\"extra\":1}");
+
+    verify(inventoryManagerService).decrementStockForOrder("O1");
+  }
+
+  @Test
+  void onPaymentSuccessful_jsonStringWrappingObject_decrements() {
+    service.onPaymentSuccessful("\"{\\\"orderId\\\":\\\"O1\\\",\\\"success\\\":true}\"");
+
+    verify(inventoryManagerService).decrementStockForOrder("O1");
+  }
+
+  @Test
+  void onPaymentSuccessful_successFalse_releases() {
+    service.onPaymentSuccessful("{\"orderId\":\"O1\",\"success\":false}");
+
+    verify(inventoryManagerService).releaseReservedStockForOrder("O1");
+    verify(inventoryManagerService, never()).decrementStockForOrder(any());
+  }
+
+  @Test
+  void onPaymentFailed_alwaysReleasesEvenIfSuccessFlagSet() {
+    service.onPaymentFailed("{\"orderId\":\"O1\",\"success\":true}");
+
+    verify(inventoryManagerService).releaseReservedStockForOrder("O1");
+    verify(inventoryManagerService, never()).decrementStockForOrder(any());
+  }
+
+  @Test
+  void onPaymentListeners_blankOrMalformedPayload_isSkipped() {
+    assertThatCode(
+            () -> {
+              service.onPaymentSuccessful(null);
+              service.onPaymentSuccessful(" ");
+              service.onPaymentSuccessful("not-json");
+              service.onPaymentFailed("null");
+              service.onPaymentFailed("42");
+            })
+        .doesNotThrowAnyException();
+
+    verify(inventoryManagerService, never()).decrementStockForOrder(any());
+    verify(inventoryManagerService, never()).releaseReservedStockForOrder(any());
+  }
+
+  @Test
+  void onPaymentSuccessful_inventoryError_isSwallowedToAvoidRedelivery() {
+    when(inventoryManagerService.decrementStockForOrder("O1"))
+        .thenThrow(CodedErrorFactory.create(MappedError.PROD_4002, "A", 0));
+
+    assertThatCode(() -> service.onPaymentSuccessful("{\"orderId\":\"O1\",\"success\":true}"))
+        .doesNotThrowAnyException();
   }
 }
