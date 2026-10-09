@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.ecommerce.common.util.KafkaTopicNames;
 import com.ecommerce.payment.model.PaymentTransaction;
 import com.ecommerce.payment.repository.PaymentTransactionRepository;
+import com.ecommerce.payment.service.RazorpayWebhookService;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Map;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -45,6 +47,7 @@ class PaymentKafkaIntegrationTest {
 
   @Autowired private EmbeddedKafkaBroker broker;
   @Autowired private PaymentTransactionRepository repository;
+  @Autowired private RazorpayWebhookService webhookService;
 
   private Consumer<String, String> resultConsumer;
   private KafkaTemplate<String, String> rawProducer;
@@ -79,6 +82,10 @@ class PaymentKafkaIntegrationTest {
             + "\",\"items\":[{\"sku\":\"SKU-1\",\"quantity\":2,\"unitPrice\":10.00}],"
             + "\"totalAmount\":20.00}";
     rawProducer.send(new ProducerRecord<>(KafkaTopicNames.ORDER_PLACED_TOPIC, orderId, json)).get();
+    return awaitResult(orderId);
+  }
+
+  private ConsumerRecord<String, String> awaitResult(String orderId) {
     long deadline = System.currentTimeMillis() + 30_000;
     while (System.currentTimeMillis() < deadline) {
       for (ConsumerRecord<String, String> record : resultConsumer.poll(Duration.ofMillis(500))) {
@@ -98,6 +105,8 @@ class PaymentKafkaIntegrationTest {
     assertThat(result.value()).contains("\"success\":true").contains("it-order-1");
     PaymentTransaction tx = repository.findFirstByOrderIdOrderByCreatedAtDesc("it-order-1").orElseThrow();
     assertThat(tx.getStatus()).isEqualTo(PaymentTransaction.STATUS_SUCCESS);
+    assertThat(tx.getGatewayRef()).matches("pay_[A-Za-z0-9]{14}");
+    assertThat(tx.getRazorpayOrderId()).matches("order_[A-Za-z0-9]{14}");
   }
 
   @Test
@@ -107,6 +116,25 @@ class PaymentKafkaIntegrationTest {
     assertThat(result.topic()).isEqualTo(KafkaTopicNames.PAYMENT_FAILED_TOPIC);
     assertThat(result.value()).contains("\"success\":false").contains("PAY_4001");
     assertThat(repository.findFirstByOrderIdOrderByCreatedAtDesc("it-order-2").orElseThrow().getStatus())
+        .isEqualTo(PaymentTransaction.STATUS_FAILED);
+  }
+
+  @Test
+  void razorpayWebhook_signedPaymentFailed_publishesFailureForInitiatedTransaction() {
+    PaymentTransaction tx =
+        new PaymentTransaction("TXN-it-webhook", "it-order-3", "alice", new BigDecimal("20.00"),
+            "pay_ITwebhook00001", PaymentTransaction.STATUS_INITIATED);
+    repository.save(tx);
+    String body =
+        "{\"event\":\"payment.failed\",\"payload\":{\"payment\":{\"entity\":"
+            + "{\"id\":\"pay_ITwebhook00001\",\"error_description\":\"Card declined by gateway\"}}}}";
+
+    webhookService.processWebhook(body, RazorpayWebhookService.sign(body, "rzp_test_webhook_secret"));
+
+    ConsumerRecord<String, String> result = awaitResult("it-order-3");
+    assertThat(result.topic()).isEqualTo(KafkaTopicNames.PAYMENT_FAILED_TOPIC);
+    assertThat(result.value()).contains("\"success\":false").contains("Card declined by gateway");
+    assertThat(repository.findById("TXN-it-webhook").orElseThrow().getStatus())
         .isEqualTo(PaymentTransaction.STATUS_FAILED);
   }
 }

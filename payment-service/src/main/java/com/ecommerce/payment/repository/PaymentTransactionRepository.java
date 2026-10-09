@@ -11,4 +11,11 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
 
   /** Returns the most recent transaction recorded for the order. */
   Optional<PaymentTransaction> findFirstByOrderIdOrderByCreatedAtDesc(String orderId);
+
+  /** Returns the most recent transaction carrying the Razorpay pay_ reference. */
+  Optional<PaymentTransaction> findFirstByGatewayRefOrderByCreatedAtDesc(String gatewayRef);
+
+  /** Returns the most recent transaction attempted on the Razorpay order_ ID. */
+  Optional<PaymentTransaction> findFirstByRazorpayOrderIdOrderByCreatedAtDesc(
+      String razorpayOrderId);
 }

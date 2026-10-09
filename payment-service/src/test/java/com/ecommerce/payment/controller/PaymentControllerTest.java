@@ -34,8 +34,9 @@ class PaymentControllerTest {
 
   private static PaymentTransaction successTx() {
     PaymentTransaction tx =
-        new PaymentTransaction("TXN-1", "o-1", "alice", new BigDecimal("49.99"), "GW-1",
-            PaymentTransaction.STATUS_SUCCESS);
+        new PaymentTransaction("TXN-1", "o-1", "alice", new BigDecimal("49.99"),
+            "pay_AbCdEfGhIjKlMn", PaymentTransaction.STATUS_SUCCESS);
+    tx.setRazorpayOrderId("order_AbCdEfGhIjKlMn");
     return tx;
   }
 
@@ -47,8 +48,12 @@ class PaymentControllerTest {
         .perform(get("/payments/order/o-1"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.transactionId").value("TXN-1"))
+        .andExpect(jsonPath("$.orderId").value("o-1"))
+        .andExpect(jsonPath("$.userId").value("alice"))
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.amount").value(49.99))
+        .andExpect(jsonPath("$.gatewayRef").value("pay_AbCdEfGhIjKlMn"))
+        .andExpect(jsonPath("$.razorpayOrderId").value("order_AbCdEfGhIjKlMn"))
         .andExpect(jsonPath("$.createdAt").isNotEmpty());
   }
 

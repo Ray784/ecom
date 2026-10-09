@@ -32,3 +32,8 @@ payment:
   kafka:
     group-id: payment-service
     send-timeout-ms: 10000
+
+razorpay:
+  key-id: rzp_test_key_id
+  key-secret: rzp_test_key_secret
+  webhook-secret: rzp_test_webhook_secret

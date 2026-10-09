@@ -18,6 +18,7 @@ import com.ecommerce.common.error.MappedError;
 import com.ecommerce.common.exception.ApiInternalException;
 import com.ecommerce.common.exception.ApplicationBaseException;
 import com.ecommerce.payment.gateway.GatewayErrorMapper;
+import com.ecommerce.payment.gateway.RazorpayClient;
 import com.ecommerce.payment.gateway.SimulatedPaymentGateway;
 import com.ecommerce.payment.model.PaymentTransaction;
 import com.ecommerce.payment.repository.PaymentTransactionRepository;
@@ -59,7 +60,11 @@ class PaymentProcessorServiceTest {
                 store.values().stream()
                     .filter(tx -> tx.getOrderId().equals(invocation.getArgument(0)))
                     .max(Comparator.comparing(PaymentTransaction::getCreatedAt)));
-    gateway = spy(new SimulatedPaymentGateway());
+    RazorpayEmulatorService emulator =
+        new RazorpayEmulatorService("rzp_test_key_id", "rzp_test_key_secret");
+    gateway =
+        spy(new SimulatedPaymentGateway(
+            new RazorpayClient(emulator, "rzp_test_key_id", "rzp_test_key_secret")));
     producer = mock(KafkaProducerService.class);
     service = new PaymentProcessorService(repository, gateway, new GatewayErrorMapper(), producer);
   }
@@ -79,7 +84,8 @@ class PaymentProcessorServiceTest {
     PaymentTransaction tx = service.initiatePayment(order("o-1", "alice", "49.99"));
 
     assertThat(tx.getStatus()).isEqualTo(PaymentTransaction.STATUS_SUCCESS);
-    assertThat(tx.getGatewayRef()).startsWith("GW-");
+    assertThat(tx.getGatewayRef()).startsWith("pay_").hasSize(18);
+    assertThat(tx.getRazorpayOrderId()).startsWith("order_").hasSize(20);
     assertThat(tx.getFailureReason()).isNull();
     assertThat(store.get(tx.getId()).getStatus()).isEqualTo(PaymentTransaction.STATUS_SUCCESS);
     PaymentResultEvent event = publishedEvent();
@@ -118,6 +124,8 @@ class PaymentProcessorServiceTest {
 
     PaymentTransaction stored = service.getByOrderId("o-4");
     assertThat(stored.getStatus()).isEqualTo(PaymentTransaction.STATUS_FAILED);
+    assertThat(stored.getGatewayRef()).startsWith("pay_");
+    assertThat(stored.getRazorpayOrderId()).startsWith("order_");
     assertThat(stored.getFailureReason()).startsWith("PAY_4001: ").contains("o-4");
     PaymentResultEvent event = publishedEvent();
     assertThat(event.isSuccess()).isFalse();
@@ -130,7 +138,7 @@ class PaymentProcessorServiceTest {
         .extracting("errorCode")
         .isEqualTo("PAY_4006");
 
-    verify(gateway, never()).charge(anyString(), anyString(), any());
+    verify(gateway, never()).charge(anyString(), anyString(), anyString(), any());
     assertThat(service.getByOrderId("o-5").getStatus()).isEqualTo(PaymentTransaction.STATUS_FAILED);
     assertThat(publishedEvent().getFailureReason()).startsWith("PAY_4006");
   }

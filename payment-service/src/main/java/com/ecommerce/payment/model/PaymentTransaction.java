@@ -32,6 +32,9 @@ public class PaymentTransaction {
   @Column(length = 64)
   private String gatewayRef;
 
+  @Column(length = 64)
+  private String razorpayOrderId;
+
   @Column(nullable = false, length = 16)
   private String status;
 
@@ -92,6 +95,14 @@ public class PaymentTransaction {
 
   public void setGatewayRef(String gatewayRef) {
     this.gatewayRef = gatewayRef;
+  }
+
+  public String getRazorpayOrderId() {
+    return razorpayOrderId;
+  }
+
+  public void setRazorpayOrderId(String razorpayOrderId) {
+    this.razorpayOrderId = razorpayOrderId;
   }
 
   public String getStatus() {

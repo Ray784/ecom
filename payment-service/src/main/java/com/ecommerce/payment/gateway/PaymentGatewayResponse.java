@@ -5,6 +5,8 @@ package com.ecommerce.payment.gateway;
  *
  * @param approved true when the gateway captured the funds
  * @param gatewayCode gateway specific result code, APPROVED on success
- * @param gatewayRef reference assigned by the gateway to the charge
+ * @param gatewayRef Razorpay pay_ ID assigned to the charge, null when no payment was created
+ * @param razorpayOrderId Razorpay order_ ID the charge was attempted on, null when none was created
  */
-public record PaymentGatewayResponse(boolean approved, String gatewayCode, String gatewayRef) {}
+public record PaymentGatewayResponse(
+    boolean approved, String gatewayCode, String gatewayRef, String razorpayOrderId) {}

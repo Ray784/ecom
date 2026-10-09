@@ -81,12 +81,15 @@ public class PaymentProcessorService {
 
     PaymentGatewayResponse response;
     try {
-      response = gateway.charge(transaction.getId(), event.getUserId(), event.getTotalAmount());
+      response =
+          gateway.charge(
+              transaction.getId(), event.getOrderId(), event.getUserId(), event.getTotalAmount());
     } catch (GatewayCommunicationException ex) {
       throw failAndPublish(
           transaction, CodedErrorFactory.create(MappedError.PAY_5002, ex, transaction.getId()));
     }
     transaction.setGatewayRef(response.gatewayRef());
+    transaction.setRazorpayOrderId(response.razorpayOrderId());
     repository.save(transaction);
 
     if (response.approved()) {

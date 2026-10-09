@@ -12,7 +12,8 @@ public record PaymentTransactionResponse(
     String gatewayRef,
     String status,
     String failureReason,
-    String createdAt) {
+    String createdAt,
+    String razorpayOrderId) {
 
   public static PaymentTransactionResponse from(PaymentTransaction tx) {
     return new PaymentTransactionResponse(
@@ -23,6 +24,7 @@ public record PaymentTransactionResponse(
         tx.getGatewayRef(),
         tx.getStatus(),
         tx.getFailureReason(),
-        tx.getCreatedAt() == null ? null : tx.getCreatedAt().toString());
+        tx.getCreatedAt() == null ? null : tx.getCreatedAt().toString(),
+        tx.getRazorpayOrderId());
   }
 }
