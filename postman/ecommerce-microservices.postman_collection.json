@@ -1,0 +1,2057 @@
+{
+  "info": {
+    "_postman_id": "e6b8c412-90ab-4d3f-b821-7a912e34f001",
+    "name": "E-Commerce Microservices Platform (Spring Boot 3 + Kafka + Razorpay)",
+    "description": "End-to-end Postman Collection v2.1 for the 10-microservice E-Commerce application.\n- Collection-level Bearer JWT Auth (`{{jwtToken}}`) automatically populated by the Login request test scripts.\n- Admin routes use `{{adminToken}}`; Razorpay `/v1/*` routes use Basic Auth (`{{razorpayKeyId}}:{{razorpayKeySecret}}`).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwtToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "gatewayUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "iamUrl",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "productUrl",
+      "value": "http://localhost:8083",
+      "type": "string"
+    },
+    {
+      "key": "jwtToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bobToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bobUserId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "addressId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "sku",
+      "value": "SKU-LAPTOP-01",
+      "type": "string"
+    },
+    {
+      "key": "sku2",
+      "value": "SKU-MOUSE-02",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "razorpayKeyId",
+      "value": "rzp_test_key_id",
+      "type": "string"
+    },
+    {
+      "key": "razorpayKeySecret",
+      "value": "rzp_test_key_secret",
+      "type": "string"
+    },
+    {
+      "key": "razorpayWebhookSecret",
+      "value": "rzp_test_webhook_secret",
+      "type": "string"
+    },
+    {
+      "key": "razorpayOrderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "razorpayPaymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "razorpayWebhookSignature",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. IAM & JWT Auth",
+      "item": [
+        {
+          "name": "1.1 Register Customer (alice)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/users/register",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "users",
+                "register"
+              ]
+            },
+            "description": "Registers customer account `alice` and saves `userId` into collection/environment variables.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"alice\",\n  \"password\": \"Alice@1234\",\n  \"email\": \"alice@example.com\",\n  \"firstName\": \"Alice\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201 Created', function () { pm.response.to.have.status(201); });",
+                  "var json = pm.response.json();",
+                  "if (json.userId) { pm.collectionVariables.set('userId', json.userId); pm.environment.set('userId', json.userId); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 Register Second Customer (bob)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/users/register",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "users",
+                "register"
+              ]
+            },
+            "description": "Registers customer `bob` for cross-user RBAC and verified-purchaser negative tests.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"bob\",\n  \"password\": \"Bob@12345\",\n  \"email\": \"bob@example.com\",\n  \"firstName\": \"Bob\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201 Created', function () { pm.response.to.have.status(201); });",
+                  "var json = pm.response.json();",
+                  "if (json.userId) { pm.collectionVariables.set('bobUserId', json.userId); pm.environment.set('bobUserId', json.userId); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.3 Login Customer (alice) -> Sets {{jwtToken}}",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/auth/login",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Authenticates `alice` and automatically configures `{{jwtToken}}` and `{{customerToken}}` for all subsequent requests.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"alice\",\n  \"password\": \"Alice@1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 OK and JWT issued', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.jwtToken).to.be.a('string').and.not.empty;",
+                  "    pm.collectionVariables.set('jwtToken', json.jwtToken);",
+                  "    pm.collectionVariables.set('customerToken', json.jwtToken);",
+                  "    pm.environment.set('jwtToken', json.jwtToken);",
+                  "    pm.environment.set('customerToken', json.jwtToken);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.4 Login Seeded Admin (admin) -> Sets {{adminToken}}",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/auth/login",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Authenticates seeded `admin` user and stores `{{adminToken}}` for `ROLE_ADMIN` endpoints.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"Admin@1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 OK and Admin JWT issued', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.jwtToken).to.be.a('string').and.not.empty;",
+                  "    pm.collectionVariables.set('adminToken', json.jwtToken);",
+                  "    pm.environment.set('adminToken', json.jwtToken);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.5 Login Second Customer (bob) -> Sets {{bobToken}}",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/auth/login",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"bob\",\n  \"password\": \"Bob@12345\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 OK and Bob JWT issued', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('bobToken', json.jwtToken);",
+                  "    pm.environment.set('bobToken', json.jwtToken);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.6 Validate JWT Token (Direct IAM Service)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{iamUrl}}/auth/validate",
+              "host": [
+                "{{iamUrl}}"
+              ],
+              "path": [
+                "auth",
+                "validate"
+              ]
+            },
+            "description": "Calls `iam-service` `/auth/validate` using the collection-level Bearer `{{jwtToken}}`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Token is valid', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().valid).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.7 Update Customer Password via Gateway (PUT /users/{id}/password)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/users/{{userId}}/password",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{userId}}",
+                "password"
+              ]
+            },
+            "description": "Updates customer's password via API Gateway and revokes prior tokens; re-run 1.3 Login afterwards to refresh `{{jwtToken}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newPassword\": \"Alice@1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Password updated', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02. User Profile & Addresses",
+      "item": [
+        {
+          "name": "2.1 Get User Profile (Auto-Initialized from IAM)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/profiles/{{userId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "profiles",
+                "{{userId}}"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 OK', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Update User Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/profiles/{{userId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "profiles",
+                "{{userId}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Alice\",\n  \"lastName\": \"Wonderland\",\n  \"email\": \"alice@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Profile updated', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().lastName).to.eql('Wonderland');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 Add Default Shipping Address",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/profiles/{{userId}}/addresses",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "profiles",
+                "{{userId}}",
+                "addresses"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"street\": \"742 Evergreen Terrace\",\n  \"city\": \"Springfield\",\n  \"zipCode\": \"62704\",\n  \"default\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Address created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    if (json.id) { pm.collectionVariables.set('addressId', String(json.id)); }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4 Delete Shipping Address",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/profiles/{{userId}}/addresses/{{addressId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "profiles",
+                "{{userId}}",
+                "addresses",
+                "{{addressId}}"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204 No Content', function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03. Product Catalog & Inventory",
+      "item": [
+        {
+          "name": "3.1 Create Product 1 (Admin - SKU-LAPTOP-01)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/products",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "products"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"SKU-LAPTOP-01\",\n  \"name\": \"Pro Ultrabook 15\",\n  \"description\": \"High performance developer laptop\",\n  \"price\": 1200.0,\n  \"categoryId\": \"ELECTRONICS\",\n  \"initialStock\": 15,\n  \"imageUrl\": \"https://cdn.ecommerce.local/laptop01.png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Product created (201)', function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 Create Product 2 (Admin - SKU-MOUSE-02)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/products",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "products"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"SKU-MOUSE-02\",\n  \"name\": \"Wireless Ergonomic Mouse\",\n  \"description\": \"Bluetooth precision optical mouse\",\n  \"price\": 50.0,\n  \"categoryId\": \"ELECTRONICS\",\n  \"initialStock\": 30,\n  \"imageUrl\": \"https://cdn.ecommerce.local/mouse02.png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Product 2 created (201)', function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.3 Update Product 1 (Admin - PUT /products/SKU-LAPTOP-01)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/products/{{sku}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "products",
+                "{{sku}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"SKU-LAPTOP-01\",\n  \"name\": \"Pro Ultrabook 15 Gen2\",\n  \"description\": \"Updated developer laptop with 32GB RAM\",\n  \"price\": 1250.0,\n  \"categoryId\": \"ELECTRONICS\",\n  \"initialStock\": 15,\n  \"imageUrl\": \"https://cdn.ecommerce.local/laptop01-v2.png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Product updated (200)', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.4 Get Product Details (Public - GET /products/{sku})",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/products/{{sku}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "products",
+                "{{sku}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Product fetched (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().sku).to.eql('SKU-LAPTOP-01');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.5 List All Products (Public - GET /products)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/products",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "products"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Products listed (200)', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.6 Reserve Inventory Synchronously (Internal - POST /inventory/reserve)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{productUrl}}/inventory/reserve",
+              "host": [
+                "{{productUrl}}"
+              ],
+              "path": [
+                "inventory",
+                "reserve"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"ORD-MANUAL-RESERVE-01\",\n  \"items\": [\n    {\n      \"sku\": \"SKU-MOUSE-02\",\n      \"quantity\": 1,\n      \"unitPrice\": 50.0\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Stock reserved (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().success).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04. Product Search",
+      "item": [
+        {
+          "name": "4.1 Search Products by Keyword, Category & Sort",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/search/products?q=Ultrabook&category=ELECTRONICS&sortField=price&sortOrder=asc&page=0&size=10",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "search",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "Ultrabook"
+                },
+                {
+                  "key": "category",
+                  "value": "ELECTRONICS"
+                },
+                {
+                  "key": "sortField",
+                  "value": "price"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "asc"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Search returns matching product', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.pagination.totalElements).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05. Shopping Cart & Order Lifecycle (Kafka Saga)",
+      "item": [
+        {
+          "name": "5.1 Add Laptop to Cart (POST /carts/items)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/carts/items",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "carts",
+                "items"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"SKU-LAPTOP-01\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Added laptop to cart', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.2 Add Mouse to Cart (POST /carts/items)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/carts/items",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "carts",
+                "items"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"SKU-MOUSE-02\",\n  \"quantity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Added mouse to cart', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.3 Get Active Cart (GET /carts)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/carts",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "carts"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Cart subtotal is 1350.00', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().subtotal).to.eql(1350.00);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.4 Place Order from Cart (POST /orders -> Triggers Kafka Saga)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/orders",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shippingAddress\": \"742 Evergreen Terrace, Springfield, IL 62704\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Order created (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('orderId', json.orderId);",
+                  "    pm.environment.set('orderId', json.orderId);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.5 Get Order Status (GET /orders/{orderId} -> PAID after Kafka Saga)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/orders/{{orderId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Order fetched (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().orderId).to.eql(pm.collectionVariables.get('orderId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.6 Check Verified Purchase Status (GET /orders/verified-purchase)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/orders/verified-purchase?userId={{userId}}&sku={{sku}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "orders",
+                "verified-purchase"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{userId}}"
+                },
+                {
+                  "key": "sku",
+                  "value": "{{sku}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Verified purchase is true', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().verified).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06. Payments & Fake Razorpay Gateway",
+      "item": [
+        {
+          "name": "6.1 Get Order Payment Transaction (GET /payments/order/{orderId})",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/payments/order/{{orderId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "payments",
+                "order",
+                "{{orderId}}"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Payment status is SUCCESS with Razorpay refs', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('SUCCESS');",
+                  "    pm.expect(json.gatewayRef).to.match(/^pay_/);",
+                  "    pm.expect(json.razorpayOrderId).to.match(/^order_/);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.2 Fake Razorpay: Create Order (POST /v1/orders with Basic Auth)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/v1/orders",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "v1",
+                "orders"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{razorpayKeyId}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{razorpayKeySecret}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50000,\n  \"currency\": \"INR\",\n  \"receipt\": \"rcpt-postman-1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Razorpay order created', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.id).to.match(/^order_/);",
+                  "    pm.collectionVariables.set('razorpayOrderId', json.id);",
+                  "    pm.environment.set('razorpayOrderId', json.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.3 Fake Razorpay: Get Order (GET /v1/orders/{id})",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/v1/orders/{{razorpayOrderId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "v1",
+                "orders",
+                "{{razorpayOrderId}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{razorpayKeyId}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{razorpayKeySecret}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Razorpay order fetched', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.4 Fake Razorpay: Capture Payment (POST /v1/payments with Basic Auth)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/v1/payments",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "v1",
+                "payments"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{razorpayKeyId}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{razorpayKeySecret}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{razorpayOrderId}}\",\n  \"amount\": 50000,\n  \"method\": \"card\",\n  \"payer_user_id\": \"{{userId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Razorpay payment captured', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.id).to.match(/^pay_/);",
+                  "    pm.expect(json.status).to.eql('captured');",
+                  "    pm.collectionVariables.set('razorpayPaymentId', json.id);",
+                  "    pm.environment.set('razorpayPaymentId', json.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.5 Fake Razorpay: Get Payment (GET /v1/payments/{id})",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/v1/payments/{{razorpayPaymentId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "v1",
+                "payments",
+                "{{razorpayPaymentId}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{razorpayKeyId}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{razorpayKeySecret}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Razorpay payment fetched', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.6 Fake Razorpay: Signed Webhook Callback (POST /payments/razorpay/webhook)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var secret = pm.collectionVariables.get('razorpayWebhookSecret') || 'rzp_test_webhook_secret';",
+                  "var rawBody = pm.request.body.raw;",
+                  "var resolvedBody = pm.variables.replaceIn(rawBody);",
+                  "var sig = CryptoJS.HmacSHA256(resolvedBody, secret).toString(CryptoJS.enc.Hex);",
+                  "pm.collectionVariables.set('razorpayWebhookSignature', sig);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Webhook signature verified (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().paymentStatus).to.eql('SUCCESS');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Razorpay-Signature",
+                "value": "{{razorpayWebhookSignature}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"event\":\"payment.captured\",\"orderId\":\"{{orderId}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{gatewayUrl}}/payments/razorpay/webhook",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "payments",
+                "razorpay",
+                "webhook"
+              ]
+            },
+            "description": "Pre-request script computes HMAC-SHA256 signature using CryptoJS and `{{razorpayWebhookSecret}}` and sets `X-Razorpay-Signature`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. Invoices & Notifications",
+      "item": [
+        {
+          "name": "7.1 Get Generated Invoice & PDF Path (GET /invoices/{orderId})",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/invoices/{{orderId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{orderId}}"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Invoice generated with tax & discount', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.id).to.match(/^INV-/);",
+                  "    pm.expect(json.pdfStorageLink).to.include('.pdf');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.2 Get Order Notifications (GET /notifications/order/{orderId})",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/notifications/order/{{orderId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "order",
+                "{{orderId}}"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Order and payment notifications logged', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().length).to.be.at.least(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08. Product Reviews & Ratings",
+      "item": [
+        {
+          "name": "8.1 Submit Verified Purchaser Review (POST /reviews)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/reviews",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "reviews"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"SKU-LAPTOP-01\",\n  \"rating\": 5,\n  \"comment\": \"Blazing fast laptop and keyboard feels great\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Review created (201)', function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.2 Get Reviews for Product (Public - GET /reviews/products/{sku})",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/reviews/products/{{sku}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "reviews",
+                "products",
+                "{{sku}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Reviews returned', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().length).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.3 Get Aggregate Rating for Product (Public - GET /reviews/products/{sku}/rating)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/reviews/products/{{sku}}/rating",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "reviews",
+                "products",
+                "{{sku}}",
+                "rating"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Aggregate rating is 5.0', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().averageRating).to.eql(5.0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09. Negative & Error Catalog Verification",
+      "item": [
+        {
+          "name": "9.1 IAM_4001: Invalid Login Credentials (401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/auth/login",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"alice\",\n  \"password\": \"WrongPassword123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 401 IAM_4001', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "    pm.expect(pm.response.json().errorCode).to.eql('IAM_4001');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9.2 IAM_4002: Invalid/Tampered JWT Token (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/orders/{{orderId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "invalid.jwt.token",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 401 IAM_4002', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "    pm.expect(pm.response.json().errorCode).to.eql('IAM_4002');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9.3 IAM_4008: Customer Calling Admin Endpoint POST /products (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/products",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "products"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"SKU-UNAUTH\",\n  \"name\": \"Unauthorized Item\",\n  \"price\": 10.0,\n  \"categoryId\": \"BOOKS\",\n  \"initialStock\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 403 IAM_4008', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    pm.expect(pm.response.json().errorCode).to.eql('IAM_4008');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9.4 USER_4007: Modifying Another User Profile (403)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/profiles/{{bobUserId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "profiles",
+                "{{bobUserId}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Hacked\",\n  \"lastName\": \"Name\",\n  \"email\": \"bob@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 403 USER_4007', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    pm.expect(pm.response.json().errorCode).to.eql('USER_4007');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9.5 REVIEW_4004: Review for Non-Existent Product (404)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/reviews",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "reviews"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"SKU-GHOST-999\",\n  \"rating\": 5,\n  \"comment\": \"Ghost product\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 404 REVIEW_4004', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "    pm.expect(pm.response.json().errorCode).to.eql('REVIEW_4004');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9.6 REVIEW_4006: Unverified Purchaser Submitting Review (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/reviews",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "reviews"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{bobToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"SKU-LAPTOP-01\",\n  \"rating\": 4,\n  \"comment\": \"Bob never bought this\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 403 REVIEW_4006', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    pm.expect(pm.response.json().errorCode).to.eql('REVIEW_4006');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9.7 PAY_4002: Invalid Razorpay Webhook Signature (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Razorpay-Signature",
+                "value": "deadbeef"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/payments/razorpay/webhook",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "payments",
+                "razorpay",
+                "webhook"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"payment.captured\",\n  \"orderId\": \"{{orderId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 400 PAY_4002', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(pm.response.json().errorCode).to.eql('PAY_4002');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

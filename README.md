@@ -38,4 +38,6 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash test/run_e2e_live.sh
 - [`docs/ERROR_CATALOG.md`](docs/ERROR_CATALOG.md) — Standardized Coded Error Catalog (83 error codes)
 - [`test/TEST_PLAN.md`](test/TEST_PLAN.md) — Master Test Plan (Parts 1–4: Module Matrix, 83-Code Catalog Coverage, Fake Razorpay, Kafka Stock Settlement, Verified Purchaser & Password RBAC)
 - [`test/E2E_TEST_REPORT.md`](test/E2E_TEST_REPORT.md) — Unit, Integration & Live E2E Test Report (1,021 Unit/Integration + 113 Live E2E Assertions)
-- [`test/MILESTONES.md`](test/MILESTONES.md) — 6-Month Engineering Milestones (`M1`–`M6`, 24 Commits)
+- [`test/MILESTONES.md`](test/MILESTONES.md) — 6-Month Engineering Milestones (`M1`–`M6`, 25 Commits)
+- [`postman/ecommerce-microservices.postman_collection.json`](postman/ecommerce-microservices.postman_collection.json) — Postman Collection v2.1 (9 folders, 42 requests, auto-configured Bearer `{{jwtToken}}` / `{{adminToken}}` on login + Fake Razorpay Basic Auth & CryptoJS HMAC-SHA256 webhook pre-request signing)
+- [`postman/ecommerce-local.postman_environment.json`](postman/ecommerce-local.postman_environment.json) — Postman Environment for the 10 local microservices (`localhost:8080..8089`)

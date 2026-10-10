@@ -13,7 +13,7 @@ This document tracks the 6-month engineering roadmap, architectural milestones, 
 | **M3** | Jun 2026 | Shopping Cart, Order Lifecycle & Asynchronous Kafka Saga | `order-service` | 3 |
 | **M4** | Jul 2026 | Payment Processing, PDF Invoicing & Notification Engine | `payment-service`, `invoice-service`, `notification-service` | 3 |
 | **M5** | Aug–Sep 2026 | Customer Reviews, Aggregate Ratings & Unified API Gateway | `review-service`, `api-gateway` | 3 |
-| **M6** | Oct 2026 | Fake Razorpay, Stock Settlement, Verified Reviews, Test Plan & Live E2E | All 11 modules, `test/` | 8 |
+| **M6** | Oct 2026 | Fake Razorpay, Stock Settlement, Verified Reviews, Test Plan, Live E2E & Postman | All 11 modules, `test/`, `postman/` | 9 |
 
 ---
 
@@ -101,3 +101,5 @@ This document tracks the 6-month engineering roadmap, architectural milestones, 
   - Added `GET /orders/verified-purchase` and `GET /orders` in `order-service` (87 tests), `ProductCatalogClient` & `OrderVerificationClient` in `review-service` (56 tests), `requireSelfOrAdmin` password ownership check in `iam-service` (62 tests), and gateway routes for `/v1/orders/**`, `/v1/payments/**`, `/payments/razorpay/webhook`, `PUT /users/{id}/password`, and `GET /orders/verified-purchase` in `api-gateway` (87 tests).
 - **M6.8 (`2026-10-10`) — Master `test/TEST_PLAN.md` & Expanded Live E2E Verification (1,021 Reactor Tests, 113 E2E Assertions):**
   - Authored `test/TEST_PLAN.md` (Parts 1–4 covering all 48 test classes and all 83 `MappedError` codes) and updated `test/run_e2e_live.sh`, `test/E2E_TEST_REPORT.md`, `test/MILESTONES.md`, and `README.md`.
+- **M6.9 (`2026-10-10`) — Postman Collection v2.1 & Local Environment (`postman/`):**
+  - Added `postman/ecommerce-microservices.postman_collection.json` (9 folders, 42 requests with collection-level Bearer `{{jwtToken}}` auto-captured from `POST /auth/login`, `{{adminToken}}` for admin routes, Basic Auth for `/v1/*` Razorpay routes, and CryptoJS HMAC-SHA256 webhook signature pre-request script) and `postman/ecommerce-local.postman_environment.json`.
