@@ -251,6 +251,59 @@ class IamControllerIntegrationTest {
   }
 
   @Test
+  void updatePassword_forwardedOwnCaller_succeedsAndNewPasswordLogsIn() throws Exception {
+    String username = uniqueName("jill");
+    String userId = register(username).get("userId").asText();
+
+    mockMvc
+        .perform(
+            put("/users/{id}/password", userId)
+                .header("X-User-Id", userId)
+                .header("X-User-Roles", "ROLE_CUSTOMER")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(Map.of("newPassword", "Owner4567"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true));
+
+    assertThat(login(username, "Owner4567")).isNotBlank();
+  }
+
+  @Test
+  void updatePassword_forwardedAdminCaller_canUpdateAnyUser() throws Exception {
+    String username = uniqueName("kate");
+    String userId = register(username).get("userId").asText();
+
+    mockMvc
+        .perform(
+            put("/users/{id}/password", userId)
+                .header("X-User-Id", "admin-caller")
+                .header("X-User-Roles", "ROLE_CUSTOMER,ROLE_ADMIN")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(Map.of("newPassword", "Admin5678x"))))
+        .andExpect(status().isOk());
+
+    assertThat(login(username, "Admin5678x")).isNotBlank();
+  }
+
+  @Test
+  void updatePassword_forwardedOtherNonAdminCaller_returnsIam4008() throws Exception {
+    String username = uniqueName("liam");
+    String userId = register(username).get("userId").asText();
+
+    mockMvc
+        .perform(
+            put("/users/{id}/password", userId)
+                .header("X-User-Id", "intruder")
+                .header("X-User-Roles", "ROLE_CUSTOMER")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(Map.of("newPassword", "Hacked1234"))))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.errorCode").value("IAM_4008"));
+
+    assertThat(login(username, PASSWORD)).isNotBlank();
+  }
+
+  @Test
   void getUser_knownAndUnknown() throws Exception {
     String username = uniqueName("ivy");
     String userId = register(username).get("userId").asText();

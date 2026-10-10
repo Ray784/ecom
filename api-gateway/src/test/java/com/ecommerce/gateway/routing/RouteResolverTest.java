@@ -21,7 +21,12 @@ class RouteResolverTest {
     "GET, /reviews/products/p-1, REVIEW",
     "GET, /reviews/products/p-1/rating, REVIEW",
     "GET, /reviews/12, REVIEW",
-    "get, /products/p-1, PRODUCT"
+    "get, /products/p-1, PRODUCT",
+    "POST, /payments/razorpay/webhook, PAYMENT",
+    "POST, /v1/orders, PAYMENT",
+    "GET, /v1/orders/order_abc123, PAYMENT",
+    "POST, /v1/payments, PAYMENT",
+    "GET, /v1/payments/pay_abc123, PAYMENT"
   })
   void publicRoutes_needNoAuthentication(String method, String path, ServiceId service) {
     assertThat(resolver.resolve(method, path)).contains(Route.publicRoute(service));
@@ -36,7 +41,10 @@ class RouteResolverTest {
 
   @ParameterizedTest
   @CsvSource({
+    "PUT, /users/u-1/password, IAM",
     "POST, /orders, ORDER",
+    "GET, /orders, ORDER",
+    "GET, /orders/verified-purchase, ORDER",
     "GET, /orders/o-1, ORDER",
     "PUT, /orders/o-1/cancel, ORDER",
     "GET, /carts, ORDER",
@@ -69,7 +77,9 @@ class RouteResolverTest {
     "DELETE, /products/p-1",
     "GET, /reviews",
     "POST, /inventory/reserve",
-    "GET, /orders/o-1/extra"
+    "GET, /orders/o-1/extra",
+    "GET, /users/u-1/password",
+    "DELETE, /v1/orders/order_abc123"
   })
   void unmappedRoutes_resolveToEmpty(String method, String path) {
     assertThat(resolver.resolve(method, path)).isEmpty();

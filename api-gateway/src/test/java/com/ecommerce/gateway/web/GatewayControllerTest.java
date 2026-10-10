@@ -309,4 +309,85 @@ class GatewayControllerTest {
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.errorCode").value("IAM_4002"));
   }
+
+  @Test
+  void passwordUpdate_withCustomerToken_isForwardedToIamWithVerifiedIdentity() throws Exception {
+    DOWNSTREAM.on("/users", r -> Reply.json(200, "{\"success\":true}"));
+
+    mockMvc
+        .perform(
+            put("/users/cust-1/password")
+                .header(HttpHeaders.AUTHORIZATION, bearer(CUSTOMER_TOKEN))
+                .header("X-User-Id", "spoofed")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"newPassword\":\"Changed789\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true));
+
+    Recorded forwarded = DOWNSTREAM.last("/users/cust-1/password");
+    assertThat(forwarded.method()).isEqualTo("PUT");
+    assertThat(forwarded.body()).isEqualTo("{\"newPassword\":\"Changed789\"}");
+    assertThat(forwarded.header("X-User-Id")).isEqualTo("cust-1");
+    assertThat(forwarded.header("X-User-Roles")).isEqualTo("ROLE_CUSTOMER");
+  }
+
+  @Test
+  void passwordUpdate_withoutToken_returns401Iam4002() throws Exception {
+    mockMvc
+        .perform(
+            put("/users/cust-1/password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"newPassword\":\"Changed789\"}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.errorCode").value("IAM_4002"));
+
+    assertThat(DOWNSTREAM.last("/users")).isNull();
+  }
+
+  @Test
+  void razorpayWebhook_isPublicAndPreservesSignatureHeader() throws Exception {
+    DOWNSTREAM.on("/payments/razorpay/webhook", r -> Reply.json(200, "{\"status\":\"ok\"}"));
+
+    mockMvc
+        .perform(
+            post("/payments/razorpay/webhook")
+                .header("X-Razorpay-Signature", "abc123sig")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"event\":\"payment.captured\"}"))
+        .andExpect(status().isOk());
+
+    Recorded forwarded = DOWNSTREAM.last("/payments/razorpay/webhook");
+    assertThat(forwarded.header("X-Razorpay-Signature")).isEqualTo("abc123sig");
+    assertThat(forwarded.body()).isEqualTo("{\"event\":\"payment.captured\"}");
+    assertThat(forwarded.header("X-User-Id")).isNull();
+    assertThat(DOWNSTREAM.last("/auth/validate")).isNull();
+  }
+
+  @Test
+  void razorpayEmulatorRoutes_arePublicAndPreserveBasicAuthorization() throws Exception {
+    String basic = "Basic cnpwX3Rlc3Rfa2V5X2lkOnJ6cF90ZXN0X2tleV9zZWNyZXQ=";
+    DOWNSTREAM.on("/v1/orders", r -> Reply.json(200, "{\"id\":\"order_abc\"}"));
+    DOWNSTREAM.on("/v1/payments", r -> Reply.json(200, "{\"id\":\"pay_abc\"}"));
+
+    mockMvc
+        .perform(
+            post("/v1/orders")
+                .header(HttpHeaders.AUTHORIZATION, basic)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\":1000}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value("order_abc"));
+    mockMvc
+        .perform(
+            post("/v1/payments")
+                .header(HttpHeaders.AUTHORIZATION, basic)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"order_id\":\"order_abc\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value("pay_abc"));
+
+    assertThat(DOWNSTREAM.last("/v1/orders").header("Authorization")).isEqualTo(basic);
+    assertThat(DOWNSTREAM.last("/v1/payments").header("Authorization")).isEqualTo(basic);
+    assertThat(DOWNSTREAM.last("/auth/validate")).isNull();
+  }
 }

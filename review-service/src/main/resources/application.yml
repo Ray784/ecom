@@ -16,3 +16,13 @@ spring:
 
 review:
   prohibited-words: spam,prohibited,offensive
+  product-service:
+    url: ${PRODUCT_SERVICE_URL:http://localhost:8083}
+  order-service:
+    url: ${ORDER_SERVICE_URL:http://localhost:8084}
+  http:
+    connect-timeout-ms: 2000
+    read-timeout-ms: 5000
+  validation:
+    product-check-enabled: true
+    purchase-check-enabled: true

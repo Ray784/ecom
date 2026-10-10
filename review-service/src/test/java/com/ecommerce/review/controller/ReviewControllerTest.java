@@ -1,28 +1,48 @@
 package com.ecommerce.review.controller;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.ecommerce.review.client.OrderVerificationClient;
+import com.ecommerce.review.client.ProductCatalogClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
-/** Full stack tests against the H2 database; each test uses its own product ID. */
+/**
+ * Full stack tests against the H2 database; each test uses its own product ID.
+ *
+ * <p>The product-service and order-service clients are mocked so the remote checks stay enabled
+ * as in production without needing the peer services.
+ */
 @SpringBootTest
 @AutoConfigureMockMvc
 class ReviewControllerTest {
 
   @Autowired private MockMvc mockMvc;
   @Autowired private ObjectMapper objectMapper;
+
+  @MockBean private ProductCatalogClient productCatalogClient;
+  @MockBean private OrderVerificationClient orderVerificationClient;
+
+  @BeforeEach
+  void allowProductsAndPurchasesByDefault() {
+    when(productCatalogClient.productExists(anyString())).thenReturn(true);
+    when(orderVerificationClient.isVerifiedPurchaser(anyString(), anyString())).thenReturn(true);
+  }
 
   private ResultActions submit(String headerUserId, String body) throws Exception {
     var builder = post("/reviews").contentType(MediaType.APPLICATION_JSON).content(body);
@@ -168,5 +188,31 @@ class ReviewControllerTest {
         .perform(get("/reviews/abc"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.errorCode").value("BAD_REQUEST"));
+  }
+
+  @Test
+  void postReview_productUnknownToProductService_returns404Review4004() throws Exception {
+    when(productCatalogClient.productExists("c-missing")).thenReturn(false);
+
+    submit("u1", body(null, "c-missing", 4, "Good"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.errorCode").value("REVIEW_4004"))
+        .andExpect(
+            jsonPath("$.errorDetails")
+                .value("Product c-missing does not exist, cannot submit review."));
+  }
+
+  @Test
+  void postReview_unverifiedPurchaser_returns403Review4006() throws Exception {
+    when(orderVerificationClient.isVerifiedPurchaser("browser", "c-p10")).thenReturn(false);
+
+    submit("browser", body(null, "c-p10", 4, "Good"))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.errorCode").value("REVIEW_4006"))
+        .andExpect(
+            jsonPath("$.errorDetails")
+                .value(
+                    "User browser cannot submit a review for product c-p10: must be a verified"
+                        + " purchaser."));
   }
 }

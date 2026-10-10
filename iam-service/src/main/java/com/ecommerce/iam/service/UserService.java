@@ -148,6 +148,28 @@ public class UserService {
     }
   }
 
+  /**
+   * Enforces that a gateway authenticated caller acts on its own account unless it holds
+   * ROLE_ADMIN.
+   *
+   * <p>The check only applies when the gateway forwarded a non blank X-User-Id header; direct
+   * internal calls without the header are trusted. Throws IAM_4008 when the caller targets another
+   * account without ROLE_ADMIN.
+   */
+  public void requireSelfOrAdmin(String targetUserId, String callerId, String rolesHeader) {
+    if (callerId == null || callerId.isBlank() || callerId.equals(targetUserId)) {
+      return;
+    }
+    if (!hasAdminRole(rolesHeader)) {
+      throw CodedErrorFactory.create(MappedError.IAM_4008, callerId, Role.ADMIN);
+    }
+  }
+
+  private static boolean hasAdminRole(String rolesHeader) {
+    return rolesHeader != null
+        && Arrays.stream(rolesHeader.split(",")).map(String::trim).anyMatch(Role.ADMIN::equals);
+  }
+
   Set<Role> resolveRoles(String username, String requestedRole) {
     String role = requestedRole == null ? "" : requestedRole.trim().toUpperCase(Locale.ROOT);
     Set<Role> roles = new LinkedHashSet<>();

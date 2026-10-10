@@ -34,12 +34,23 @@ public class RouteResolver {
     add("GET", "/reviews/products/{productId}/rating", Route.publicRoute(ServiceId.REVIEW));
     add("GET", "/reviews/{id}", Route.publicRoute(ServiceId.REVIEW));
 
+    // Razorpay emulator and webhook authenticate with Basic Auth or HMAC signatures, not bearer
+    // tokens, so the gateway lets them through and payment-service verifies the forwarded headers
+    add("POST", "/payments/razorpay/webhook", Route.publicRoute(ServiceId.PAYMENT));
+    add("POST", "/v1/orders", Route.publicRoute(ServiceId.PAYMENT));
+    add("GET", "/v1/orders/{id}", Route.publicRoute(ServiceId.PAYMENT));
+    add("POST", "/v1/payments", Route.publicRoute(ServiceId.PAYMENT));
+    add("GET", "/v1/payments/{id}", Route.publicRoute(ServiceId.PAYMENT));
+
     // Catalog management, admin only
     add("POST", "/products", Route.withRole(ServiceId.PRODUCT, ROLE_ADMIN));
     add("PUT", "/products/{id}", Route.withRole(ServiceId.PRODUCT, ROLE_ADMIN));
 
     // Customer endpoints
+    add("PUT", "/users/{id}/password", Route.withRole(ServiceId.IAM, ROLE_CUSTOMER));
     add("POST", "/orders", Route.withRole(ServiceId.ORDER, ROLE_CUSTOMER));
+    add("GET", "/orders", Route.withRole(ServiceId.ORDER, ROLE_CUSTOMER));
+    add("GET", "/orders/verified-purchase", Route.withRole(ServiceId.ORDER, ROLE_CUSTOMER));
     add("GET", "/orders/{orderId}", Route.withRole(ServiceId.ORDER, ROLE_CUSTOMER));
     add("PUT", "/orders/{orderId}/cancel", Route.withRole(ServiceId.ORDER, ROLE_CUSTOMER));
     add("GET", "/carts", Route.withRole(ServiceId.ORDER, ROLE_CUSTOMER));

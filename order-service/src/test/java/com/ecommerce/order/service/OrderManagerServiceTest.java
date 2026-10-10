@@ -24,6 +24,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -233,5 +234,35 @@ class OrderManagerServiceTest {
         .thenReturn(Optional.of(order("o1", OrderStatus.INVENTORY_RESERVED, null)));
 
     assertThat(service.getOrderStatus("o1")).isEqualTo(OrderStatus.INVENTORY_RESERVED);
+  }
+
+  @Test
+  void getOrdersByUserIdMapsEveryOrderOfTheUser() {
+    when(orderRepository.findByUserIdOrderByCreationDateDesc(USER))
+        .thenReturn(List.of(order("o2", OrderStatus.PAID, null), order("o1", OrderStatus.PENDING,
+            null)));
+
+    List<OrderDetailsDTO> orders = service.getOrdersByUserId(USER);
+
+    assertThat(orders).extracting(OrderDetailsDTO::getOrderId).containsExactly("o2", "o1");
+    assertThat(orders).extracting(OrderDetailsDTO::getStatus).containsExactly("PAID", "PENDING");
+  }
+
+  @Test
+  void getOrdersByUserIdReturnsEmptyListForUnknownUser() {
+    when(orderRepository.findByUserIdOrderByCreationDateDesc("nobody")).thenReturn(List.of());
+
+    assertThat(service.getOrdersByUserId("nobody")).isEmpty();
+  }
+
+  @Test
+  void isVerifiedPurchaseQueriesPaidOrdersOnly() {
+    when(orderRepository.existsByUserIdAndStatusAndItemsSku(USER, "PAID", "SKU-1"))
+        .thenReturn(true);
+    when(orderRepository.existsByUserIdAndStatusAndItemsSku(USER, "PAID", "SKU-2"))
+        .thenReturn(false);
+
+    assertThat(service.isVerifiedPurchase(USER, "SKU-1")).isTrue();
+    assertThat(service.isVerifiedPurchase(USER, "SKU-2")).isFalse();
   }
 }

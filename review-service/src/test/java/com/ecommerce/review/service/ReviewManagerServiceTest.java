@@ -13,6 +13,8 @@ import com.ecommerce.common.dto.ReviewDTO;
 import com.ecommerce.common.exception.ApiExternalException;
 import com.ecommerce.common.exception.ApiInternalException;
 import com.ecommerce.common.exception.ApplicationBaseException;
+import com.ecommerce.review.client.OrderVerificationClient;
+import com.ecommerce.review.client.ProductCatalogClient;
 import com.ecommerce.review.model.AggregateRating;
 import com.ecommerce.review.model.Review;
 import com.ecommerce.review.repository.AggregateRatingRepository;
@@ -270,5 +272,100 @@ class ReviewManagerServiceTest {
             reviewRepository, aggregateRatingRepository, List.of(), Clock.systemUTC());
 
     assertThat(permissive.containsProhibitedWord("spam spam spam")).isFalse();
+  }
+
+  private ReviewManagerService serviceWithRemoteChecks(
+      ProductCatalogClient productCatalogClient, OrderVerificationClient orderVerificationClient) {
+    return new ReviewManagerService(
+        reviewRepository,
+        aggregateRatingRepository,
+        List.of("spam"),
+        Clock.fixed(NOW, ZoneOffset.UTC),
+        productCatalogClient,
+        orderVerificationClient);
+  }
+
+  @Test
+  void submitReview_productUnknownToProductService_throwsReview4004() {
+    ProductCatalogClient products = mock(ProductCatalogClient.class);
+    OrderVerificationClient orders = mock(OrderVerificationClient.class);
+    when(products.productExists("p1")).thenReturn(false);
+
+    assertError(
+        () -> serviceWithRemoteChecks(products, orders).submitReview(request("u1", "p1", 4, "ok")),
+        "REVIEW_4004",
+        404);
+    verify(orders, never()).isVerifiedPurchaser(any(), any());
+    verify(reviewRepository, never()).saveAndFlush(any());
+  }
+
+  @Test
+  void submitReview_unverifiedPurchaser_throwsReview4006() {
+    ProductCatalogClient products = mock(ProductCatalogClient.class);
+    OrderVerificationClient orders = mock(OrderVerificationClient.class);
+    when(products.productExists("p1")).thenReturn(true);
+    when(orders.isVerifiedPurchaser("u1", "p1")).thenReturn(false);
+
+    assertError(
+        () -> serviceWithRemoteChecks(products, orders).submitReview(request("u1", "p1", 4, "ok")),
+        "REVIEW_4006",
+        403);
+    verify(reviewRepository, never()).saveAndFlush(any());
+  }
+
+  @Test
+  void submitReview_existingProductAndVerifiedPurchaser_isAccepted() {
+    ProductCatalogClient products = mock(ProductCatalogClient.class);
+    OrderVerificationClient orders = mock(OrderVerificationClient.class);
+    when(products.productExists("p1")).thenReturn(true);
+    when(orders.isVerifiedPurchaser("u1", "p1")).thenReturn(true);
+
+    ReviewDTO result =
+        serviceWithRemoteChecks(products, orders).submitReview(request(" u1 ", " p1 ", 5, "ok"));
+
+    assertThat(result.getId()).isEqualTo(42L);
+    verify(products).productExists("p1");
+    verify(orders).isVerifiedPurchaser("u1", "p1");
+  }
+
+  @Test
+  void submitReview_localValidationFailure_skipsRemoteChecks() {
+    ProductCatalogClient products = mock(ProductCatalogClient.class);
+    OrderVerificationClient orders = mock(OrderVerificationClient.class);
+
+    assertError(
+        () -> serviceWithRemoteChecks(products, orders).submitReview(request("u1", "p1", 9, "ok")),
+        "REVIEW_4003",
+        400);
+    verify(products, never()).productExists(any());
+    verify(orders, never()).isVerifiedPurchaser(any(), any());
+  }
+
+  @Test
+  void publicConstructor_checksDisabledByFlags_neverCallsClients() {
+    ProductCatalogClient products = mock(ProductCatalogClient.class);
+    OrderVerificationClient orders = mock(OrderVerificationClient.class);
+    ReviewManagerService unchecked =
+        new ReviewManagerService(
+            reviewRepository, aggregateRatingRepository, List.of(), products, orders, false,
+            false);
+
+    assertThat(unchecked.submitReview(request("u1", "p1", 4, "ok")).getId()).isEqualTo(42L);
+    verify(products, never()).productExists(any());
+    verify(orders, never()).isVerifiedPurchaser(any(), any());
+  }
+
+  @Test
+  void publicConstructor_checksEnabledByFlags_callsClients() {
+    ProductCatalogClient products = mock(ProductCatalogClient.class);
+    OrderVerificationClient orders = mock(OrderVerificationClient.class);
+    when(products.productExists("p1")).thenReturn(true);
+    ReviewManagerService checked =
+        new ReviewManagerService(
+            reviewRepository, aggregateRatingRepository, List.of(), products, orders, true, true);
+
+    assertError(
+        () -> checked.submitReview(request("u1", "p1", 4, "ok")), "REVIEW_4006", 403);
+    verify(products).productExists("p1");
   }
 }

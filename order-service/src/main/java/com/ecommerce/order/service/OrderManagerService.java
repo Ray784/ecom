@@ -100,6 +100,21 @@ public class OrderManagerService {
     return toDto(findOrder(orderId));
   }
 
+  /** Returns all orders of the user, newest first. An unknown user yields an empty list. */
+  @Transactional(readOnly = true)
+  public List<OrderDetailsDTO> getOrdersByUserId(String userId) {
+    return orderRepository.findByUserIdOrderByCreationDateDesc(userId).stream()
+        .map(OrderManagerService::toDto)
+        .toList();
+  }
+
+  /** Returns true when the user has at least one PAID order containing the given SKU. */
+  @Transactional(readOnly = true)
+  public boolean isVerifiedPurchase(String userId, String sku) {
+    return orderRepository.existsByUserIdAndStatusAndItemsSku(
+        userId, OrderStatus.PAID.name(), sku);
+  }
+
   /** Moves the order to the given status, validating the transition. */
   @Transactional
   public OrderDetailsDTO updateOrderStatus(String orderId, OrderStatus status) {

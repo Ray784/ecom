@@ -43,7 +43,11 @@ public class UserController {
 
   @PutMapping("/{userId}/password")
   public BaseResponseDTO updatePassword(
-      @PathVariable String userId, @RequestBody(required = false) PasswordUpdateRequest request) {
+      @PathVariable String userId,
+      @RequestBody(required = false) PasswordUpdateRequest request,
+      @RequestHeader(value = USER_ID_HEADER, required = false) String callerUserId,
+      @RequestHeader(value = USER_ROLES_HEADER, required = false) String callerRoles) {
+    userService.requireSelfOrAdmin(userId, callerUserId, callerRoles);
     userService.updatePassword(userId, request == null ? null : request.newPassword());
     return BaseResponseDTO.ok("Password updated");
   }

@@ -5,6 +5,8 @@ import com.ecommerce.common.dto.ReviewDTO;
 import com.ecommerce.common.error.CodedErrorFactory;
 import com.ecommerce.common.error.MappedError;
 import com.ecommerce.common.exception.ApplicationBaseException;
+import com.ecommerce.review.client.OrderVerificationClient;
+import com.ecommerce.review.client.ProductCatalogClient;
 import com.ecommerce.review.model.AggregateRating;
 import com.ecommerce.review.model.Review;
 import com.ecommerce.review.repository.AggregateRatingRepository;
@@ -28,7 +30,10 @@ import org.springframework.transaction.annotation.Transactional;
  * Handles review submission, moderation and aggregate rating calculation.
  *
  * <p>Validation runs in a fixed order so the reported error is deterministic: caller identity,
- * product ID, rating range, comment length, prohibited language and finally duplicates.
+ * product ID, rating range, comment length, prohibited language, product existence in
+ * product-service, verified purchase in order-service and finally duplicates. The two remote
+ * checks are toggled by review.validation.product-check-enabled and
+ * review.validation.purchase-check-enabled.
  */
 @Service
 public class ReviewManagerService {
@@ -46,19 +51,47 @@ public class ReviewManagerService {
   private final Set<String> prohibitedWords;
   private final Clock clock;
 
+  /** Null when the product existence check is disabled. */
+  private final ProductCatalogClient productCatalogClient;
+
+  /** Null when the verified purchase check is disabled. */
+  private final OrderVerificationClient orderVerificationClient;
+
   @Autowired
   public ReviewManagerService(
       ReviewRepository reviewRepository,
       AggregateRatingRepository aggregateRatingRepository,
-      @Value("${review.prohibited-words:spam,prohibited,offensive}") List<String> prohibitedWords) {
-    this(reviewRepository, aggregateRatingRepository, prohibitedWords, Clock.systemUTC());
+      @Value("${review.prohibited-words:spam,prohibited,offensive}") List<String> prohibitedWords,
+      ProductCatalogClient productCatalogClient,
+      OrderVerificationClient orderVerificationClient,
+      @Value("${review.validation.product-check-enabled:true}") boolean productCheckEnabled,
+      @Value("${review.validation.purchase-check-enabled:true}") boolean purchaseCheckEnabled) {
+    this(
+        reviewRepository,
+        aggregateRatingRepository,
+        prohibitedWords,
+        Clock.systemUTC(),
+        productCheckEnabled ? productCatalogClient : null,
+        purchaseCheckEnabled ? orderVerificationClient : null);
   }
 
+  /** Creates a service with both remote checks disabled, for tests that only need local rules. */
   ReviewManagerService(
       ReviewRepository reviewRepository,
       AggregateRatingRepository aggregateRatingRepository,
       List<String> prohibitedWords,
       Clock clock) {
+    this(reviewRepository, aggregateRatingRepository, prohibitedWords, clock, null, null);
+  }
+
+  /** Full constructor. A null client disables the matching remote check. */
+  ReviewManagerService(
+      ReviewRepository reviewRepository,
+      AggregateRatingRepository aggregateRatingRepository,
+      List<String> prohibitedWords,
+      Clock clock,
+      ProductCatalogClient productCatalogClient,
+      OrderVerificationClient orderVerificationClient) {
     this.reviewRepository = Objects.requireNonNull(reviewRepository, "reviewRepository");
     this.aggregateRatingRepository =
         Objects.requireNonNull(aggregateRatingRepository, "aggregateRatingRepository");
@@ -69,15 +102,18 @@ public class ReviewManagerService {
             .filter(word -> !word.isEmpty())
             .collect(Collectors.toUnmodifiableSet());
     this.clock = Objects.requireNonNull(clock, "clock");
+    this.productCatalogClient = productCatalogClient;
+    this.orderVerificationClient = orderVerificationClient;
   }
 
   /**
    * Validates and stores a review, then refreshes the aggregate rating of its product.
    *
    * @throws ApplicationBaseException with IAM_4002 when no user ID is present, REVIEW_4004 for a
-   *     blank product ID, REVIEW_4003 for an out of range rating, REVIEW_4005 for an overlong
-   *     comment, REVIEW_4001 for prohibited language, REVIEW_4002 for a duplicate review and
-   *     REVIEW_5001 when the aggregate rating cannot be refreshed
+   *     blank product ID or a product unknown to product-service, REVIEW_4003 for an out of range
+   *     rating, REVIEW_4005 for an overlong comment, REVIEW_4001 for prohibited language,
+   *     REVIEW_4006 when the user has no paid order for the product, REVIEW_4002 for a duplicate
+   *     review and REVIEW_5001 when the aggregate rating cannot be refreshed
    */
   @Transactional
   public ReviewDTO submitReview(ReviewDTO request) {
@@ -97,6 +133,13 @@ public class ReviewManagerService {
     }
     if (containsProhibitedWord(comment)) {
       throw CodedErrorFactory.create(MappedError.REVIEW_4001);
+    }
+    if (productCatalogClient != null && !productCatalogClient.productExists(productId)) {
+      throw CodedErrorFactory.create(MappedError.REVIEW_4004, productId);
+    }
+    if (orderVerificationClient != null
+        && !orderVerificationClient.isVerifiedPurchaser(userId, productId)) {
+      throw CodedErrorFactory.create(MappedError.REVIEW_4006, userId, productId);
     }
     if (reviewRepository.existsByUserIdAndProductId(userId, productId)) {
       throw CodedErrorFactory.create(MappedError.REVIEW_4002, userId, productId);

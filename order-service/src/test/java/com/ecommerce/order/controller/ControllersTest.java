@@ -1,5 +1,6 @@
 package com.ecommerce.order.controller;
 
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -214,5 +215,47 @@ class ControllersTest {
             .content("{\"orderId\":\"o1\",\"transactionId\":\"t1\",\"success\":true}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status", is("PAID")));
+  }
+
+  @Test
+  void listOrdersPrefersQueryUserOverHeader() throws Exception {
+    when(orderManagerService.getOrdersByUserId("query-user")).thenReturn(List.of(order("PAID")));
+
+    mvc.perform(get("/orders?userId=query-user").header("X-User-Id", "header-user"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].orderId", is("o1")))
+        .andExpect(jsonPath("$[0].status", is("PAID")));
+  }
+
+  @Test
+  void listOrdersFallsBackToHeaderUser() throws Exception {
+    when(orderManagerService.getOrdersByUserId("header-user")).thenReturn(List.of());
+
+    mvc.perform(get("/orders").header("X-User-Id", "header-user"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$", hasSize(0)));
+    verify(orderManagerService).getOrdersByUserId("header-user");
+  }
+
+  @Test
+  void listOrdersWithoutAnyUserIsUnauthorized() throws Exception {
+    mvc.perform(get("/orders"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.errorCode", is("IAM_4002")));
+  }
+
+  @Test
+  void verifiedPurchaseReportsServiceResult() throws Exception {
+    when(orderManagerService.isVerifiedPurchase("u1", "SKU-1")).thenReturn(true);
+    when(orderManagerService.isVerifiedPurchase("u1", "SKU-9")).thenReturn(false);
+
+    mvc.perform(get("/orders/verified-purchase?userId=u1&sku=SKU-1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.userId", is("u1")))
+        .andExpect(jsonPath("$.sku", is("SKU-1")))
+        .andExpect(jsonPath("$.verified", is(true)));
+    mvc.perform(get("/orders/verified-purchase?userId=u1&sku=SKU-9"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.verified", is(false)));
   }
 }

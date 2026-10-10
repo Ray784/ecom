@@ -102,6 +102,37 @@ class OrderServiceIntegrationTest {
   }
 
   @Test
+  void verifiedPurchaseRequiresPaidOrderWithSku() throws Exception {
+    String orderId = placeOrder("it-user-4");
+
+    mvc.perform(get("/orders/verified-purchase?userId=it-user-4&sku=SKU-1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.verified", is(false)));
+
+    mvc.perform(post("/events/payment-result")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"orderId\":\"" + orderId + "\",\"success\":true}"))
+        .andExpect(jsonPath("$.status", is("PAID")));
+
+    mvc.perform(get("/orders/verified-purchase?userId=it-user-4&sku=SKU-1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.userId", is("it-user-4")))
+        .andExpect(jsonPath("$.sku", is("SKU-1")))
+        .andExpect(jsonPath("$.verified", is(true)));
+    mvc.perform(get("/orders/verified-purchase?userId=it-user-4&sku=SKU-404"))
+        .andExpect(jsonPath("$.verified", is(false)));
+    mvc.perform(get("/orders/verified-purchase?userId=someone-else&sku=SKU-1"))
+        .andExpect(jsonPath("$.verified", is(false)));
+
+    mvc.perform(get("/orders?userId=it-user-4"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$", hasSize(1)))
+        .andExpect(jsonPath("$[0].orderId", is(orderId)));
+    mvc.perform(get("/orders").header("X-User-Id", "it-user-4"))
+        .andExpect(jsonPath("$", hasSize(1)));
+  }
+
+  @Test
   void paymentFailureThenCancelReturnsOrder4010() throws Exception {
     String orderId = placeOrder("it-user-2");
 

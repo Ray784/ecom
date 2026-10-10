@@ -208,4 +208,31 @@ class UserServiceTest {
     assertCode(() -> userService.requireAdminIfForwarded("u-1", "ROLE_CUSTOMER"), "IAM_4008");
     assertCode(() -> userService.requireAdminIfForwarded(null, ""), "IAM_4008");
   }
+
+  @Test
+  void requireSelfOrAdmin_missingOrBlankCaller_isTrusted() {
+    assertThatCode(() -> userService.requireSelfOrAdmin("u-1", null, null))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> userService.requireSelfOrAdmin("u-1", " ", "ROLE_CUSTOMER"))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void requireSelfOrAdmin_sameCaller_passes() {
+    assertThatCode(() -> userService.requireSelfOrAdmin("u-1", "u-1", "ROLE_CUSTOMER"))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void requireSelfOrAdmin_otherCallerWithAdminRole_passes() {
+    assertThatCode(
+            () -> userService.requireSelfOrAdmin("u-1", "admin-1", "ROLE_CUSTOMER, ROLE_ADMIN"))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void requireSelfOrAdmin_otherCallerWithoutAdminRole_throwsIam4008() {
+    assertCode(() -> userService.requireSelfOrAdmin("u-1", "u-2", "ROLE_CUSTOMER"), "IAM_4008");
+    assertCode(() -> userService.requireSelfOrAdmin("u-1", "u-2", null), "IAM_4008");
+  }
 }

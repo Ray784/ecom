@@ -2,6 +2,7 @@ package com.ecommerce.order.controller;
 
 import com.ecommerce.common.dto.OrderDetailsDTO;
 import com.ecommerce.order.service.OrderManagerService;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -47,6 +49,26 @@ public class OrderController {
     created.setStatusCode(HttpStatus.CREATED.value());
     created.setMessage("Order created");
     return created;
+  }
+
+  /**
+   * Lists the orders of a user, newest first.
+   *
+   * <p>The userId query parameter wins over the gateway header. Omitting both yields IAM_4002.
+   */
+  @GetMapping
+  public List<OrderDetailsDTO> listOrders(
+      @RequestParam(required = false) String userId,
+      @RequestHeader(value = RequestUser.USER_ID_HEADER, required = false) String headerUserId) {
+    return orderManagerService.getOrdersByUserId(RequestUser.resolve(userId, headerUserId));
+  }
+
+  /** Reports whether the user has a PAID order containing the SKU, used by review-service. */
+  @GetMapping("/verified-purchase")
+  public VerifiedPurchaseResponse verifiedPurchase(
+      @RequestParam String userId, @RequestParam String sku) {
+    return new VerifiedPurchaseResponse(
+        userId, sku, orderManagerService.isVerifiedPurchase(userId, sku));
   }
 
   @GetMapping("/{orderId}")
