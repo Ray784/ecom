@@ -13,7 +13,7 @@ This document tracks the 6-month engineering roadmap, architectural milestones, 
 | **M3** | Jun 2026 | Shopping Cart, Order Lifecycle & Asynchronous Kafka Saga | `order-service` | 3 |
 | **M4** | Jul 2026 | Payment Processing, PDF Invoicing & Notification Engine | `payment-service`, `invoice-service`, `notification-service` | 3 |
 | **M5** | Aug–Sep 2026 | Customer Reviews, Aggregate Ratings & Unified API Gateway | `review-service`, `api-gateway` | 3 |
-| **M6** | Oct 2026 | Full Reactor Test Suite, Live Multi-Server E2E & Reports | All 11 modules, `test/` | 4 |
+| **M6** | Oct 2026 | Fake Razorpay, Stock Settlement, Verified Reviews, Test Plan & Live E2E | All 11 modules, `test/` | 8 |
 
 ---
 
@@ -23,7 +23,7 @@ This document tracks the 6-month engineering roadmap, architectural milestones, 
 **Target Dates:** `2026-04-10` to `2026-04-28`
 
 - **M1.1 (`2026-04-10`) — Architecture Specs & Multi-Module Maven Parent:**
-  - Authored `docs/HLD.md`, `docs/LLD.md`, and `docs/ERROR_CATALOG.md` defining the 10-microservice topology, database schemas, Kafka event contracts, and 78+ standardized error codes.
+  - Authored `docs/HLD.md`, `docs/LLD.md`, and `docs/ERROR_CATALOG.md` defining the 10-microservice topology, database schemas, Kafka event contracts, and 83 standardized error codes.
   - Configured root `pom.xml` with Spring Boot `3.3.4`, Java 21 compiler target, managed dependencies, and `.gitignore`.
 - **M1.2 (`2026-04-16`) — Shared `commons-jar` Library:**
   - Implemented `BaseResponseDTO`, `ErrorResponseDTO`, `PaginationDTO`, domain request/response DTOs across all services, Kafka event payloads (`OrderPlacedEvent`, `InventoryReservationRequest`, `InventoryReservedEvent`, `PaymentResultEvent`), `KafkaTopicNames`, stateless HMAC-SHA256 `JwtUtil`, exception hierarchy (`ApplicationBaseException`, `ApiExternalException`, `ApiInternalException`), `MappedError` catalog, `CodedErrorFactory`, `ErrorMapper`, and `GlobalExceptionHandler`.
@@ -82,14 +82,22 @@ This document tracks the 6-month engineering roadmap, architectural milestones, 
 
 ---
 
-### Milestone 6 — Comprehensive Unit/Integration Tests, Live E2E Harness & Final Reports
+### Milestone 6 — Fake Razorpay, Stock Settlement, Verified Reviews, Master Test Plan & Live E2E
 **Target Dates:** `2026-10-01` to `2026-10-10`
 
 - **M6.1 (`2026-10-01`) — Foundation, IAM, User, Product & Search Test Suites:**
-  - Added 571 unit and controller integration tests across `commons-jar` (351), `iam-service` (55), `user-service` (42), `product-service` (74), and `search-service` (25).
+  - Added unit and controller integration tests across `commons-jar`, `iam-service`, `user-service`, `product-service`, and `search-service`.
 - **M6.2 (`2026-10-05`) — Order, Payment, Invoice, Notification, Review & Gateway Test Suites:**
-  - Added 344 unit and integration tests across `order-service` (79), `payment-service` (56), `invoice-service` (52), `notification-service` (45), `review-service` (39), and `api-gateway` (73), bringing the reactor total to **915 passing tests**.
+  - Added unit and integration tests across `order-service`, `payment-service`, `invoice-service`, `notification-service`, `review-service`, and `api-gateway`.
 - **M6.3 (`2026-10-08`) — Multi-Process Live Server E2E Verification Harness (`test/run_e2e_live.sh`):**
-  - Created repeatable bash harness booting embedded Kafka (`localhost:9092`) and all 10 Spring Boot microservices (`localhost:8080..8089`), executing 66 live HTTP assertions covering full order-to-invoice Kafka saga and 13 Error Catalog negative cases, and cleanly terminating all server processes.
-- **M6.4 (`2026-10-10`) — E2E Verification Report, Milestones Documentation & Repository README:**
-  - Authored `test/E2E_TEST_REPORT.md`, `test/MILESTONES.md`, and `README.md` with full test metrics, live curl request/response transcripts, and architecture documentation.
+  - Created repeatable bash harness booting embedded Kafka (`localhost:9092`) and all 10 Spring Boot microservices (`localhost:8080..8089`).
+- **M6.4 (`2026-10-09`) — Initial E2E Verification Report, Milestones Documentation & Repository README:**
+  - Authored initial `test/E2E_TEST_REPORT.md`, `test/MILESTONES.md`, and `README.md`.
+- **M6.5 (`2026-10-09`) — Fake Razorpay Emulator, Client & HMAC-SHA256 Webhook Verification (`payment-service`):**
+  - Added `RazorpayEmulatorService`, `RazorpayEmulatorController` (`POST/GET /v1/orders`, `POST/GET /v1/payments` with Basic Auth `rzp_test_key_id:rzp_test_key_secret`), `RazorpayClient`, and `RazorpayWebhookService`/`RazorpayWebhookController` (`POST /payments/razorpay/webhook` verifying `X-Razorpay-Signature` HMAC-SHA256), expanding `payment-service` to 122 tests.
+- **M6.6 (`2026-10-09`) — Post-Payment Stock Decrement & Failed-Payment Stock Release (`product-service`):**
+  - Added per-order reservation tracking (`RESERVED` -> `DECREMENTED`/`RELEASED`), `payment-successful-topic` & `payment-failed-topic` Kafka listeners calling `decrementStockForOrder` and `releaseReservedStockForOrder` idempotently, plus `/events/payment-result` fallback and `KafkaPaymentStockFlowIntegrationTest` (92 `product-service` tests).
+- **M6.7 (`2026-10-10`) — Verified Purchaser Review Enforcement (`REVIEW_4004`/`4006`) & Gateway Password RBAC:**
+  - Added `GET /orders/verified-purchase` and `GET /orders` in `order-service` (87 tests), `ProductCatalogClient` & `OrderVerificationClient` in `review-service` (56 tests), `requireSelfOrAdmin` password ownership check in `iam-service` (62 tests), and gateway routes for `/v1/orders/**`, `/v1/payments/**`, `/payments/razorpay/webhook`, `PUT /users/{id}/password`, and `GET /orders/verified-purchase` in `api-gateway` (87 tests).
+- **M6.8 (`2026-10-10`) — Master `test/TEST_PLAN.md` & Expanded Live E2E Verification (1,021 Reactor Tests, 113 E2E Assertions):**
+  - Authored `test/TEST_PLAN.md` (Parts 1–4 covering all 48 test classes and all 83 `MappedError` codes) and updated `test/run_e2e_live.sh`, `test/E2E_TEST_REPORT.md`, `test/MILESTONES.md`, and `README.md`.

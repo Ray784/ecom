@@ -164,8 +164,8 @@ REG2_CODE=$(echo "${REG2_RESP}" | tail -n1)
 assert_status "POST /users/register bob" "${REG2_CODE}" "201" "${REG2_BODY}"
 BOB_ID=$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['userId'])" <<< "${REG2_BODY}")
 
-# 4.2 Login as Seeded Admin and as Alice
-echo "--- 4.2 Login Admin and Alice ---"
+# 4.2 Login as Seeded Admin, Alice, and Bob
+echo "--- 4.2 Login Admin, Alice, and Bob ---"
 ADMIN_LOGIN_RESP=$(curl -s -w "\n%{http_code}" -X POST "${GW}/auth/login" \
     -H "Content-Type: application/json" \
     -d '{"username":"admin","password":"Admin@1234"}')
@@ -183,6 +183,14 @@ ALICE_LOGIN_CODE=$(echo "${ALICE_LOGIN_RESP}" | tail -n1)
 echo "Alice Login Response: ${ALICE_LOGIN_BODY}"
 assert_status "POST /auth/login alice" "${ALICE_LOGIN_CODE}" "200" "${ALICE_LOGIN_BODY}"
 ALICE_TOKEN=$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['jwtToken'])" <<< "${ALICE_LOGIN_BODY}")
+
+BOB_LOGIN_RESP=$(curl -s -w "\n%{http_code}" -X POST "${GW}/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"username":"bob","password":"Bob@12345"}')
+BOB_LOGIN_BODY=$(echo "${BOB_LOGIN_RESP}" | sed '$d')
+BOB_LOGIN_CODE=$(echo "${BOB_LOGIN_RESP}" | tail -n1)
+assert_status "POST /auth/login bob" "${BOB_LOGIN_CODE}" "200" "${BOB_LOGIN_BODY}"
+BOB_TOKEN=$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['jwtToken'])" <<< "${BOB_LOGIN_BODY}")
 
 # 4.3 Validate JWT directly on IAM service
 echo "--- 4.3 Validate JWT via POST http://localhost:8081/auth/validate ---"
@@ -317,10 +325,12 @@ for attempt in {1..20}; do
     sleep 1
     ORD_POLL=$(curl -s -H "Authorization: Bearer ${ALICE_TOKEN}" "${GW}/orders/${ORDER_ID}" || true)
     INV_POLL=$(curl -s -H "Authorization: Bearer ${ALICE_TOKEN}" "${GW}/invoices/${ORDER_ID}" || true)
+    PROD_POLL=$(curl -s "${GW}/products/SKU-LAPTOP-01" || true)
     ORD_STATUS=$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('status',''))" <<< "${ORD_POLL}" 2>/dev/null || echo "")
     INV_ID=$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('id',''))" <<< "${INV_POLL}" 2>/dev/null || echo "")
-    if [[ "${ORD_STATUS}" == "PAID" && -n "${INV_ID}" ]]; then
-        echo "Kafka saga converged on attempt ${attempt}s: order status=${ORD_STATUS}, invoiceId=${INV_ID}"
+    PROD_STOCK=$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('currentStock',''))" <<< "${PROD_POLL}" 2>/dev/null || echo "")
+    if [[ "${ORD_STATUS}" == "PAID" && -n "${INV_ID}" && "${PROD_STOCK}" == "14" ]]; then
+        echo "Kafka saga converged on attempt ${attempt}s: order status=${ORD_STATUS}, invoiceId=${INV_ID}, currentStock=${PROD_STOCK}"
         SAGA_DONE=1
         break
     fi
@@ -331,7 +341,7 @@ if [[ "${SAGA_DONE}" -ne 1 ]]; then
     exit 1
 fi
 
-# Verify Order status is PAID
+# Verify Order status is PAID and Verified Purchase endpoint reports true for Alice and false for Bob
 ORDER_GET_RESP=$(curl -s -w "\n%{http_code}" -X GET "${GW}/orders/${ORDER_ID}" \
     -H "Authorization: Bearer ${ALICE_TOKEN}")
 ORDER_GET_BODY=$(echo "${ORDER_GET_RESP}" | sed '$d')
@@ -340,15 +350,38 @@ echo "GET Order after Saga: ${ORDER_GET_BODY}"
 assert_status "GET /orders/{orderId}" "${ORDER_GET_CODE}" "200" "${ORDER_GET_BODY}"
 assert_json_field "Order status is PAID" "${ORDER_GET_BODY}" "data.get('status')" "PAID"
 
-# Verify Product Inventory Reserved
+VP_ALICE_RESP=$(curl -s -w "\n%{http_code}" -X GET "${GW}/orders/verified-purchase?userId=${ALICE_ID}&sku=SKU-LAPTOP-01" \
+    -H "Authorization: Bearer ${ALICE_TOKEN}")
+VP_ALICE_BODY=$(echo "${VP_ALICE_RESP}" | sed '$d')
+VP_ALICE_CODE=$(echo "${VP_ALICE_RESP}" | tail -n1)
+echo "GET Verified Purchase Alice Response: ${VP_ALICE_BODY}"
+assert_status "GET /orders/verified-purchase alice" "${VP_ALICE_CODE}" "200" "${VP_ALICE_BODY}"
+assert_json_field "Alice verified purchase=True" "${VP_ALICE_BODY}" "data.get('verified')" "True"
+
+VP_BOB_RESP=$(curl -s -w "\n%{http_code}" -X GET "${GW}/orders/verified-purchase?userId=${BOB_ID}&sku=SKU-LAPTOP-01" \
+    -H "Authorization: Bearer ${BOB_TOKEN}")
+VP_BOB_BODY=$(echo "${VP_BOB_RESP}" | sed '$d')
+VP_BOB_CODE=$(echo "${VP_BOB_RESP}" | tail -n1)
+assert_status "GET /orders/verified-purchase bob" "${VP_BOB_CODE}" "200" "${VP_BOB_BODY}"
+assert_json_field "Bob verified purchase=False" "${VP_BOB_BODY}" "data.get('verified')" "False"
+
+# Verify Product Inventory Post-Payment Stock Decrement: currentStock=14, reservedStock=0
 PROD_AFTER_RESP=$(curl -s -w "\n%{http_code}" -X GET "${GW}/products/SKU-LAPTOP-01")
 PROD_AFTER_BODY=$(echo "${PROD_AFTER_RESP}" | sed '$d')
 PROD_AFTER_CODE=$(echo "${PROD_AFTER_RESP}" | tail -n1)
 echo "GET Product after Saga: ${PROD_AFTER_BODY}"
 assert_status "GET /products/SKU-LAPTOP-01 after order" "${PROD_AFTER_CODE}" "200" "${PROD_AFTER_BODY}"
-assert_json_field "Product reservedStock incremented to 1" "${PROD_AFTER_BODY}" "data.get('reservedStock')" "1"
+assert_json_field "Product currentStock decremented to 14" "${PROD_AFTER_BODY}" "data.get('currentStock')" "14"
+assert_json_field "Product reservedStock settled to 0" "${PROD_AFTER_BODY}" "data.get('reservedStock')" "0"
 
-# Verify Payment Transaction Status is SUCCESS
+PROD2_AFTER_RESP=$(curl -s -w "\n%{http_code}" -X GET "${GW}/products/SKU-MOUSE-02")
+PROD2_AFTER_BODY=$(echo "${PROD2_AFTER_RESP}" | sed '$d')
+PROD2_AFTER_CODE=$(echo "${PROD2_AFTER_RESP}" | tail -n1)
+assert_status "GET /products/SKU-MOUSE-02 after order" "${PROD2_AFTER_CODE}" "200" "${PROD2_AFTER_BODY}"
+assert_json_field "Product 2 currentStock decremented to 28" "${PROD2_AFTER_BODY}" "data.get('currentStock')" "28"
+assert_json_field "Product 2 reservedStock settled to 0" "${PROD2_AFTER_BODY}" "data.get('reservedStock')" "0"
+
+# Verify Payment Transaction Status is SUCCESS with Razorpay pay_ and order_ identifiers
 PAY_GET_RESP=$(curl -s -w "\n%{http_code}" -X GET "${GW}/payments/order/${ORDER_ID}" \
     -H "Authorization: Bearer ${ALICE_TOKEN}")
 PAY_GET_BODY=$(echo "${PAY_GET_RESP}" | sed '$d')
@@ -356,6 +389,8 @@ PAY_GET_CODE=$(echo "${PAY_GET_RESP}" | tail -n1)
 echo "GET Payment Response: ${PAY_GET_BODY}"
 assert_status "GET /payments/order/{orderId}" "${PAY_GET_CODE}" "200" "${PAY_GET_BODY}"
 assert_json_field "Payment status is SUCCESS" "${PAY_GET_BODY}" "data.get('status')" "SUCCESS"
+assert_json_field "Payment gatewayRef starts with pay_" "${PAY_GET_BODY}" "str(data.get('gatewayRef','')).startswith('pay_')" "True"
+assert_json_field "Payment razorpayOrderId starts with order_" "${PAY_GET_BODY}" "str(data.get('razorpayOrderId','')).startswith('order_')" "True"
 
 # Verify Invoice Generated and PDF exists on disk
 INV_GET_RESP=$(curl -s -w "\n%{http_code}" -X GET "${GW}/invoices/${ORDER_ID}" \
@@ -409,8 +444,144 @@ assert_status "GET /reviews/products/SKU-LAPTOP-01/rating" "${REV_RATE_CODE}" "2
 assert_json_field "Average rating=5.0" "${REV_RATE_BODY}" "float(data.get('averageRating'))" "5.0"
 assert_json_field "Review count=1" "${REV_RATE_BODY}" "data.get('reviewCount')" "1"
 
+# 4.10 Fake Razorpay Emulator Endpoints and HMAC-SHA256 Webhook Verification via Gateway
+echo "--- 4.10 Fake Razorpay Emulator & Webhook Verification via Gateway ---"
+RZP_UNAUTH_RESP=$(curl -s -w "\n%{http_code}" -X POST "${GW}/v1/orders" \
+    -H "Content-Type: application/json" \
+    -d '{"amount":50000,"currency":"INR","receipt":"rcpt-unauth"}')
+RZP_UNAUTH_BODY=$(echo "${RZP_UNAUTH_RESP}" | sed '$d')
+RZP_UNAUTH_CODE=$(echo "${RZP_UNAUTH_RESP}" | tail -n1)
+echo "Razorpay Unauth Order Response: ${RZP_UNAUTH_BODY}"
+assert_status "POST /v1/orders without Basic Auth" "${RZP_UNAUTH_CODE}" "400" "${RZP_UNAUTH_BODY}"
+assert_json_field "Razorpay unauth errorCode=PAY_4002" "${RZP_UNAUTH_BODY}" "data.get('errorCode')" "PAY_4002"
+
+RZP_ORD_RESP=$(curl -s -w "\n%{http_code}" -u "rzp_test_key_id:rzp_test_key_secret" \
+    -X POST "${GW}/v1/orders" \
+    -H "Content-Type: application/json" \
+    -d '{"amount":50000,"currency":"INR","receipt":"rcpt-e2e-1"}')
+RZP_ORD_BODY=$(echo "${RZP_ORD_RESP}" | sed '$d')
+RZP_ORD_CODE=$(echo "${RZP_ORD_RESP}" | tail -n1)
+echo "Razorpay Create Order Response: ${RZP_ORD_BODY}"
+assert_status "POST /v1/orders with Basic Auth" "${RZP_ORD_CODE}" "200" "${RZP_ORD_BODY}"
+assert_json_field "Razorpay order id starts with order_" "${RZP_ORD_BODY}" "str(data.get('id','')).startswith('order_')" "True"
+assert_json_field "Razorpay order status=created" "${RZP_ORD_BODY}" "data.get('status')" "created"
+RZP_ORDER_ID=$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['id'])" <<< "${RZP_ORD_BODY}")
+
+RZP_ORD_GET_RESP=$(curl -s -w "\n%{http_code}" -u "rzp_test_key_id:rzp_test_key_secret" \
+    -X GET "${GW}/v1/orders/${RZP_ORDER_ID}")
+RZP_ORD_GET_BODY=$(echo "${RZP_ORD_GET_RESP}" | sed '$d')
+RZP_ORD_GET_CODE=$(echo "${RZP_ORD_GET_RESP}" | tail -n1)
+assert_status "GET /v1/orders/{id}" "${RZP_ORD_GET_CODE}" "200" "${RZP_ORD_GET_BODY}"
+assert_json_field "GET /v1/orders/{id} id matches" "${RZP_ORD_GET_BODY}" "data.get('id')" "${RZP_ORDER_ID}"
+
+RZP_PAY_RESP=$(curl -s -w "\n%{http_code}" -u "rzp_test_key_id:rzp_test_key_secret" \
+    -X POST "${GW}/v1/payments" \
+    -H "Content-Type: application/json" \
+    -d "{\"order_id\":\"${RZP_ORDER_ID}\",\"amount\":50000,\"method\":\"card\",\"payer_user_id\":\"${ALICE_ID}\"}")
+RZP_PAY_BODY=$(echo "${RZP_PAY_RESP}" | sed '$d')
+RZP_PAY_CODE=$(echo "${RZP_PAY_RESP}" | tail -n1)
+echo "Razorpay Create Payment Response: ${RZP_PAY_BODY}"
+assert_status "POST /v1/payments with Basic Auth" "${RZP_PAY_CODE}" "200" "${RZP_PAY_BODY}"
+assert_json_field "Razorpay payment id starts with pay_" "${RZP_PAY_BODY}" "str(data.get('id','')).startswith('pay_')" "True"
+assert_json_field "Razorpay payment status=captured" "${RZP_PAY_BODY}" "data.get('status')" "captured"
+RZP_PAY_ID=$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['id'])" <<< "${RZP_PAY_BODY}")
+
+RZP_PAY_GET_RESP=$(curl -s -w "\n%{http_code}" -u "rzp_test_key_id:rzp_test_key_secret" \
+    -X GET "${GW}/v1/payments/${RZP_PAY_ID}")
+RZP_PAY_GET_BODY=$(echo "${RZP_PAY_GET_RESP}" | sed '$d')
+RZP_PAY_GET_CODE=$(echo "${RZP_PAY_GET_RESP}" | tail -n1)
+assert_status "GET /v1/payments/{id}" "${RZP_PAY_GET_CODE}" "200" "${RZP_PAY_GET_BODY}"
+assert_json_field "GET /v1/payments/{id} status=captured" "${RZP_PAY_GET_BODY}" "data.get('status')" "captured"
+
+WEBHOOK_PAYLOAD="{\"event\":\"payment.captured\",\"orderId\":\"${ORDER_ID}\"}"
+WEBHOOK_BAD_RESP=$(curl -s -w "\n%{http_code}" -X POST "${GW}/payments/razorpay/webhook" \
+    -H "Content-Type: application/json" \
+    -H "X-Razorpay-Signature: deadbeef" \
+    -d "${WEBHOOK_PAYLOAD}")
+WEBHOOK_BAD_BODY=$(echo "${WEBHOOK_BAD_RESP}" | sed '$d')
+WEBHOOK_BAD_CODE=$(echo "${WEBHOOK_BAD_RESP}" | tail -n1)
+echo "Razorpay Webhook Bad Signature Response: ${WEBHOOK_BAD_BODY}"
+assert_status "POST /payments/razorpay/webhook bad signature" "${WEBHOOK_BAD_CODE}" "400" "${WEBHOOK_BAD_BODY}"
+assert_json_field "Razorpay webhook bad signature errorCode=PAY_4002" "${WEBHOOK_BAD_BODY}" "data.get('errorCode')" "PAY_4002"
+
+WEBHOOK_SIG=$(python3 -c "import hmac, hashlib, sys; print(hmac.new(b'rzp_test_webhook_secret', sys.argv[1].encode('utf-8'), hashlib.sha256).hexdigest())" "${WEBHOOK_PAYLOAD}")
+WEBHOOK_OK_RESP=$(curl -s -w "\n%{http_code}" -X POST "${GW}/payments/razorpay/webhook" \
+    -H "Content-Type: application/json" \
+    -H "X-Razorpay-Signature: ${WEBHOOK_SIG}" \
+    -d "${WEBHOOK_PAYLOAD}")
+WEBHOOK_OK_BODY=$(echo "${WEBHOOK_OK_RESP}" | sed '$d')
+WEBHOOK_OK_CODE=$(echo "${WEBHOOK_OK_RESP}" | tail -n1)
+echo "Razorpay Webhook Valid Signature Response: ${WEBHOOK_OK_BODY}"
+assert_status "POST /payments/razorpay/webhook valid signature" "${WEBHOOK_OK_CODE}" "200" "${WEBHOOK_OK_BODY}"
+assert_json_field "Razorpay webhook paymentStatus=SUCCESS" "${WEBHOOK_OK_BODY}" "data.get('paymentStatus')" "SUCCESS"
+
+# 4.11 Payment-Failed Compensation Saga & Reserved Stock Release Verification
+echo "--- 4.11 Payment-Failed Compensation Saga & Reserved Stock Release ---"
+DEC_CART_RESP=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:8084/carts/items" \
+    -H "X-User-Id: user-decline-01" \
+    -H "Content-Type: application/json" \
+    -d '{"sku":"SKU-LAPTOP-01","quantity":2}')
+DEC_CART_BODY=$(echo "${DEC_CART_RESP}" | sed '$d')
+DEC_CART_CODE=$(echo "${DEC_CART_RESP}" | tail -n1)
+assert_status "POST /carts/items for user-decline-01" "${DEC_CART_CODE}" "200" "${DEC_CART_BODY}"
+
+DEC_ORD_RESP=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:8084/orders" \
+    -H "X-User-Id: user-decline-01" \
+    -H "Content-Type: application/json" \
+    -d '{"shippingAddress":"1313 Mockingbird Lane, Springfield"}')
+DEC_ORD_BODY=$(echo "${DEC_ORD_RESP}" | sed '$d')
+DEC_ORD_CODE=$(echo "${DEC_ORD_RESP}" | tail -n1)
+echo "POST Declined User Order Response: ${DEC_ORD_BODY}"
+assert_status "POST /orders for user-decline-01" "${DEC_ORD_CODE}" "201" "${DEC_ORD_BODY}"
+DECLINE_ORDER_ID=$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['orderId'])" <<< "${DEC_ORD_BODY}")
+
+echo "Waiting for declined payment compensation saga on order ${DECLINE_ORDER_ID}..."
+DEC_SAGA_DONE=0
+for attempt in {1..20}; do
+    sleep 1
+    DEC_ORD_POLL=$(curl -s -H "Authorization: Bearer ${ALICE_TOKEN}" "${GW}/orders/${DECLINE_ORDER_ID}" || true)
+    DEC_PROD_POLL=$(curl -s "${GW}/products/SKU-LAPTOP-01" || true)
+    DEC_STATUS=$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('status',''))" <<< "${DEC_ORD_POLL}" 2>/dev/null || echo "")
+    DEC_RES=$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('reservedStock',''))" <<< "${DEC_PROD_POLL}" 2>/dev/null || echo "")
+    if [[ "${DEC_STATUS}" == "FAILED" && "${DEC_RES}" == "0" ]]; then
+        echo "Declined payment saga converged on attempt ${attempt}s: order status=${DEC_STATUS}, reservedStock=${DEC_RES}"
+        DEC_SAGA_DONE=1
+        break
+    fi
+done
+
+if [[ "${DEC_SAGA_DONE}" -ne 1 ]]; then
+    echo "ERROR: Declined payment compensation saga did not converge within 20s"
+    exit 1
+fi
+
+DEC_ORD_GET_RESP=$(curl -s -w "\n%{http_code}" -X GET "${GW}/orders/${DECLINE_ORDER_ID}" \
+    -H "Authorization: Bearer ${ALICE_TOKEN}")
+DEC_ORD_GET_BODY=$(echo "${DEC_ORD_GET_RESP}" | sed '$d')
+DEC_ORD_GET_CODE=$(echo "${DEC_ORD_GET_RESP}" | tail -n1)
+echo "GET Declined Order after Saga: ${DEC_ORD_GET_BODY}"
+assert_status "GET /orders/{declineOrderId}" "${DEC_ORD_GET_CODE}" "200" "${DEC_ORD_GET_BODY}"
+assert_json_field "Declined order status is FAILED" "${DEC_ORD_GET_BODY}" "data.get('status')" "FAILED"
+
+DEC_PAY_GET_RESP=$(curl -s -w "\n%{http_code}" -X GET "${GW}/payments/order/${DECLINE_ORDER_ID}" \
+    -H "Authorization: Bearer ${ALICE_TOKEN}")
+DEC_PAY_GET_BODY=$(echo "${DEC_PAY_GET_RESP}" | sed '$d')
+DEC_PAY_GET_CODE=$(echo "${DEC_PAY_GET_RESP}" | tail -n1)
+echo "GET Declined Payment Response: ${DEC_PAY_GET_BODY}"
+assert_status "GET /payments/order/{declineOrderId}" "${DEC_PAY_GET_CODE}" "200" "${DEC_PAY_GET_BODY}"
+assert_json_field "Declined payment status is FAILED" "${DEC_PAY_GET_BODY}" "data.get('status')" "FAILED"
+assert_json_field "Declined payment gatewayRef starts with pay_" "${DEC_PAY_GET_BODY}" "str(data.get('gatewayRef','')).startswith('pay_')" "True"
+
+DEC_PROD_RESP=$(curl -s -w "\n%{http_code}" -X GET "${GW}/products/SKU-LAPTOP-01")
+DEC_PROD_BODY=$(echo "${DEC_PROD_RESP}" | sed '$d')
+DEC_PROD_CODE=$(echo "${DEC_PROD_RESP}" | tail -n1)
+echo "GET Product after Declined Order Saga: ${DEC_PROD_BODY}"
+assert_status "GET /products/SKU-LAPTOP-01 after declined order" "${DEC_PROD_CODE}" "200" "${DEC_PROD_BODY}"
+assert_json_field "Product currentStock remains 14 after release" "${DEC_PROD_BODY}" "data.get('currentStock')" "14"
+assert_json_field "Product reservedStock released back to 0" "${DEC_PROD_BODY}" "data.get('reservedStock')" "0"
+
 echo ""
-echo "=== Step 5: Error Catalog Negative Cases Verification ==="
+echo "=== Step 5: Error Catalog Negative Cases, Verified Purchaser & Password RBAC ==="
 
 check_error_case() {
     local label="$1"
@@ -500,9 +671,50 @@ ERR_REVIEW_4003=$(curl -s -w "\n%{http_code}" -X POST "${GW}/reviews" \
     -d '{"productId":"SKU-MOUSE-02","rating":9,"comment":"Invalid rating value"}')
 check_error_case "REVIEW_4003 rating out of range" "400" "REVIEW_4003" "${ERR_REVIEW_4003}"
 
+# REVIEW_4004: Review submitted for non-existent product SKU-GHOST-999
+ERR_REVIEW_4004=$(curl -s -w "\n%{http_code}" -X POST "${GW}/reviews" \
+    -H "Authorization: Bearer ${ALICE_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{"productId":"SKU-GHOST-999","rating":5,"comment":"Review for non-existent product"}')
+check_error_case "REVIEW_4004 non-existent product review" "404" "REVIEW_4004" "${ERR_REVIEW_4004}"
+
+# REVIEW_4006: Unverified purchaser Bob submitting review for SKU-LAPTOP-01
+ERR_REVIEW_4006=$(curl -s -w "\n%{http_code}" -X POST "${GW}/reviews" \
+    -H "Authorization: Bearer ${BOB_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{"productId":"SKU-LAPTOP-01","rating":4,"comment":"Bob has not purchased this laptop"}')
+check_error_case "REVIEW_4006 unverified purchaser review" "403" "REVIEW_4006" "${ERR_REVIEW_4006}"
+
 # SEARCH_4001: Search query too short
 ERR_SEARCH_4001=$(curl -s -w "\n%{http_code}" -X GET "${GW}/search/products?q=a")
 check_error_case "SEARCH_4001 query too short" "400" "SEARCH_4001" "${ERR_SEARCH_4001}"
+
+# 5.2 Gateway Password Update & Ownership Check: PUT /users/{id}/password
+echo "--- 5.2 Gateway Password Update & Ownership Check ---"
+ERR_PWD_IAM_4008=$(curl -s -w "\n%{http_code}" -X PUT "${GW}/users/${BOB_ID}/password" \
+    -H "Authorization: Bearer ${ALICE_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{"newPassword":"HackedBob@1234"}')
+check_error_case "IAM_4008 customer updating another user password" "403" "IAM_4008" "${ERR_PWD_IAM_4008}"
+
+PWD_SELF_RESP=$(curl -s -w "\n%{http_code}" -X PUT "${GW}/users/${ALICE_ID}/password" \
+    -H "Authorization: Bearer ${ALICE_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{"newPassword":"AliceNew@5678"}')
+PWD_SELF_BODY=$(echo "${PWD_SELF_RESP}" | sed '$d')
+PWD_SELF_CODE=$(echo "${PWD_SELF_RESP}" | tail -n1)
+echo "PUT Self Password Response: ${PWD_SELF_BODY}"
+assert_status "PUT /users/{aliceId}/password self" "${PWD_SELF_CODE}" "200" "${PWD_SELF_BODY}"
+assert_json_field "Password update success=True" "${PWD_SELF_BODY}" "data.get('success')" "True"
+
+ALICE_RELOGIN_RESP=$(curl -s -w "\n%{http_code}" -X POST "${GW}/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"username":"alice","password":"AliceNew@5678"}')
+ALICE_RELOGIN_BODY=$(echo "${ALICE_RELOGIN_RESP}" | sed '$d')
+ALICE_RELOGIN_CODE=$(echo "${ALICE_RELOGIN_RESP}" | tail -n1)
+echo "Alice Re-Login with New Password Response: ${ALICE_RELOGIN_BODY}"
+assert_status "POST /auth/login alice with new password" "${ALICE_RELOGIN_CODE}" "200" "${ALICE_RELOGIN_BODY}"
+assert_json_field "Re-login issued fresh JWT" "${ALICE_RELOGIN_BODY}" "bool(data.get('jwtToken'))" "True"
 
 echo ""
 echo "=== E2E Verification Summary: ${PASS_COUNT} assertions passed, ${FAIL_COUNT} failed ==="
